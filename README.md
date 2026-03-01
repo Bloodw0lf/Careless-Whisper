@@ -131,18 +131,6 @@ bash -n whisper.sh          # syntax check
 
 ---
 
-## AI Guidelines
-
-1. After editing `whisper_hotkeys.lua`: user must reload Hammerspoon (menubar → Reload Config).
-2. Always use full binary paths — PATH is unavailable in Hammerspoon context.
-3. Use `hs.task.new()` not `hs.execute` for scripts with arguments.
-4. `nohup` is required for ffmpeg to persist after the parent script exits.
-5. `.en.bin` models reject non-English language settings — `language_allowed_for_model()` guards this.
-6. `Ctrl+Cmd` combos are reliably free. Avoid `Cmd+numbers`, `F5` (macOS Dictation).
-7. `spinner_timer` must be stopped explicitly on every non-transcribing state.
-
----
-
 ## Pitfalls
 
 | Problem                              | Root Cause                          | Fix                                       |
