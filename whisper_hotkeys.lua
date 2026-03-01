@@ -1,11 +1,34 @@
 -- Whisper speech-to-text hotkeys for Hammerspoon
--- Ctrl+Cmd+W: toggle recording (start/stop + transcribe)
--- Ctrl+Cmd+Q: stop recording immediately (alternative stop key)
--- Menubar indicator: ● (recording) / ○ (idle)
+-- Hotkeys are configured in whisper-stt.conf — reload Hammerspoon to apply changes.
 
 local home = os.getenv("HOME")
--- Path is set automatically by install.sh at install time
+-- Paths are set automatically by install.sh
 local whisper_script = home .. "/Scripts/Whisper/whisper.sh"
+local conf_file      = home .. "/Scripts/Whisper/whisper-stt.conf"
+
+-- Read a value from whisper-stt.conf
+local function read_conf(key, default)
+    local handle = io.popen(
+        "bash -c '. " .. conf_file .. " 2>/dev/null && printf \"%s\" \"${" .. key .. ":-}\"'"
+    )
+    if not handle then return default end
+    local val = handle:read("*l")
+    handle:close()
+    return (val and val ~= "") and val or default
+end
+
+-- Parse "ctrl,cmd,w" → mods {"ctrl","cmd"}, key "w"
+local function parse_hotkey(str)
+    local parts = {}
+    for p in str:gmatch("[^,]+") do
+        parts[#parts + 1] = p:match("^%s*(.-)%s*$")
+    end
+    local key = table.remove(parts)
+    return parts, key
+end
+
+local toggle_mods, toggle_key = parse_hotkey(read_conf("WHISPER_HOTKEY_TOGGLE", "ctrl,cmd,w"))
+local stop_mods,   stop_key   = parse_hotkey(read_conf("WHISPER_HOTKEY_STOP",   "ctrl,cmd,q"))
 
 local status_item = hs.menubar.new()
 
@@ -91,20 +114,15 @@ end
 if status_item then
     status_item:setMenu({
         { title = "Whisper Toggle", fn = function() run_whisper("toggle") end },
-        { title = "Whisper Stop", fn = function() run_whisper("stop") end },
+        { title = "Whisper Stop",   fn = function() run_whisper("stop") end },
         { title = "Refresh Status", fn = function() update_indicator() end }
     })
 end
 
-hs.hotkey.bind({"ctrl", "cmd"}, "w", function()
-    run_whisper("toggle")
-end)
-
-hs.hotkey.bind({"ctrl", "cmd"}, "q", function()
-    run_whisper("stop")
-end)
+hs.hotkey.bind(toggle_mods, toggle_key, function() run_whisper("toggle") end)
+hs.hotkey.bind(stop_mods,   stop_key,   function() run_whisper("stop")   end)
 
 hs.timer.doEvery(1.0, update_indicator)
 update_indicator()
 
-hs.alert.show("Whisper loaded: Ctrl+Cmd+W start/stop")
+hs.alert.show("Whisper: " .. table.concat(toggle_mods, "+") .. "+" .. toggle_key .. " start/stop")
