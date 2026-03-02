@@ -3,8 +3,8 @@
 
 local home = os.getenv("HOME")
 -- Paths are set automatically by install.sh
-local whisper_script = home .. "/Scripts/Whisper/whisper.sh"
-local conf_file      = home .. "/Scripts/Whisper/whisper-stt.conf"
+local whisper_script = home .. "/Scripts/Careless-Whisper/whisper.sh"
+local conf_file      = home .. "/Scripts/Careless-Whisper/whisper-stt.conf"
 
 -- Read a value from whisper-stt.conf
 local function read_conf(key, default)
@@ -301,16 +301,17 @@ local function build_menu()
     }
     menu[#menu + 1] = { title = "-" }
 
-    -- Model selector
+    -- Model selector (submenu)
     local installed, available = list_available_models()
     local active = get_active_model()
+    local active_display = active:gsub("^ggml%-", ""):gsub("%.bin$", "")
     if #installed > 0 or #available > 0 then
-        menu[#menu + 1] = { title = "Model", disabled = true }
+        local model_submenu = {}
         for _, m in ipairs(installed) do
             local is_active = (m == active)
             local display = m:gsub("^ggml%-", ""):gsub("%.bin$", "")
             local captured_model = m
-            menu[#menu + 1] = {
+            model_submenu[#model_submenu + 1] = {
                 title = (is_active and "✓ " or "   ") .. display,
                 fn = function()
                     if not is_active then
@@ -322,13 +323,13 @@ local function build_menu()
             }
         end
         if #available > 0 then
-            menu[#menu + 1] = { title = "-" }
-            menu[#menu + 1] = { title = "Download", disabled = true }
+            model_submenu[#model_submenu + 1] = { title = "-" }
+            model_submenu[#model_submenu + 1] = { title = "Download…", disabled = true }
             for _, m in ipairs(available) do
                 local display = m:gsub("^ggml%-", ""):gsub("%.bin$", "")
                 local captured_model = m
                 local is_downloading = download_in_progress[m] or false
-                menu[#menu + 1] = {
+                model_submenu[#model_submenu + 1] = {
                     title = (is_downloading and "⟳ " or "   ") .. display,
                     fn = function()
                         download_model(captured_model)
@@ -338,6 +339,10 @@ local function build_menu()
                 }
             end
         end
+        menu[#menu + 1] = {
+            title = "Model: " .. active_display,
+            menu = model_submenu,
+        }
         menu[#menu + 1] = { title = "-" }
     end
 
