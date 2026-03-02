@@ -34,15 +34,31 @@ Careless-Whisper/
 
 Available models (downloaded on first install or manually):
 
-| Model                    | Size     | Speed | Quality | Languages           | Best for                              |
-| ------------------------ | -------- | ----- | ------- | ------------------- | ------------------------------------- |
-| `ggml-large-v3-turbo`    | ~800 MB  | Fast  | High    | Multilingual + auto | Daily use, recommended default        |
-| `ggml-large-v3`          | ~1.5 GB  | Slow  | Highest | Multilingual + auto | Long recordings, noisy environments   |
-| `ggml-medium`            | ~1.5 GB  | Med   | Good    | Multilingual + auto | Balanced alternative                  |
-| `ggml-medium.en`         | ~1.5 GB  | Med   | Good    | English only        | English-only use (slightly better EN) |
+| Model                 | Size    | Speed | Quality | Languages           | Best for                              |
+| --------------------- | ------- | ----- | ------- | ------------------- | ------------------------------------- |
+| `ggml-large-v3-turbo` | ~800 MB | Fast  | High    | Multilingual + auto | Daily use, recommended default        |
+| `ggml-large-v3`       | ~1.5 GB | Slow  | Highest | Multilingual + auto | Long recordings, noisy environments   |
+| `ggml-medium`         | ~1.5 GB | Med   | Good    | Multilingual + auto | Balanced alternative                  |
+| `ggml-medium.en`      | ~1.5 GB | Med   | Good    | English only        | English-only use (slightly better EN) |
 
 Models are downloaded from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) and stored in `models/`.
 Switch between installed models at any time via the menubar dropdown — no restart needed.
+
+### Performance Benchmarks
+
+General comparison across all whisper.cpp model sizes (GGML quantised):
+
+| Model  | Relative Speed | Accuracy | Memory (VRAM) | Disk Space |
+| ------ | -------------- | -------- | ------------- | ---------- |
+| tiny   | 10×            | Lowest   | ~1 GB         | ~150 MB    |
+| base   | 7×             | Low      | ~1 GB         | ~300 MB    |
+| small  | 4×             | Medium   | ~2 GB         | ~1 GB      |
+| medium | 2×             | High     | ~5 GB         | ~3 GB      |
+| large  | 1×             | Highest  | ~10 GB        | ~6 GB      |
+
+> **Note:** On Apple Silicon Macs, whisper.cpp uses the GPU via Metal. The memory
+> values above are approximate and shared with system RAM (unified memory).
+> A MacBook with 8 GB RAM can comfortably run `medium`; 16 GB+ is recommended for `large`.
 
 ---
 
