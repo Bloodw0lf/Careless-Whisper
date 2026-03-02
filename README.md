@@ -34,10 +34,15 @@ Careless-Whisper/
 
 Available models (downloaded on first install or manually):
 
-- `ggml-large-v3-turbo` — ~800 MB, fast, recommended
-- `ggml-large-v3` — ~1.5 GB, highest quality
-- `ggml-medium` — ~1.5 GB, multilingual
-- `ggml-medium.en` — ~1.5 GB, English-only
+| Model                    | Size     | Speed | Quality | Languages           | Best for                              |
+| ------------------------ | -------- | ----- | ------- | ------------------- | ------------------------------------- |
+| `ggml-large-v3-turbo`    | ~800 MB  | Fast  | High    | Multilingual + auto | Daily use, recommended default        |
+| `ggml-large-v3`          | ~1.5 GB  | Slow  | Highest | Multilingual + auto | Long recordings, noisy environments   |
+| `ggml-medium`            | ~1.5 GB  | Med   | Good    | Multilingual + auto | Balanced alternative                  |
+| `ggml-medium.en`         | ~1.5 GB  | Med   | Good    | English only        | English-only use (slightly better EN) |
+
+Models are downloaded from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) and stored in `models/`.
+Switch between installed models at any time via the menubar dropdown — no restart needed.
 
 ---
 
@@ -133,17 +138,17 @@ The repo directory is kept — delete manually if desired.
 
 ## Configuration (`whisper-stt.conf`)
 
-| Variable                | Default                          | Description                      |
-| ----------------------- | -------------------------------- | -------------------------------- |
+| Variable                | Default                          | Description                                   |
+| ----------------------- | -------------------------------- | --------------------------------------------- |
 | `WHISPER_MODEL_PATH`    | `models/ggml-large-v3-turbo.bin` | Path to active model (switchable via menubar) |
-| `WHISPER_LANGUAGE`      | `auto`                           | Language or `auto` for detection |
-| `WHISPER_TRANSLATE`     | `0`                              | Set `1` to translate to English  |
-| `WHISPER_AUTO_PASTE`    | `1`                              | Auto-paste after transcription   |
-| `WHISPER_AUDIO_DEVICE`  | `default`                        | Follows macOS input selection    |
-| `WHISPER_MAX_SECONDS`   | `7200`                           | Max recording length in seconds  |
-| `WHISPER_HISTORY_MAX`   | `10`                             | Max entries kept in history      |
-| `WHISPER_NOTIFICATIONS` | `1`                              | Set `0` to disable notifications |
-| `WHISPER_SOUNDS`        | `1`                              | Set `0` to disable sounds        |
+| `WHISPER_LANGUAGE`      | `auto`                           | Language or `auto` for detection              |
+| `WHISPER_TRANSLATE`     | `0`                              | Set `1` to translate to English               |
+| `WHISPER_AUTO_PASTE`    | `1`                              | Auto-paste after transcription                |
+| `WHISPER_AUDIO_DEVICE`  | `default`                        | Follows macOS input selection                 |
+| `WHISPER_MAX_SECONDS`   | `7200`                           | Max recording length in seconds               |
+| `WHISPER_HISTORY_MAX`   | `10`                             | Max entries kept in history                   |
+| `WHISPER_NOTIFICATIONS` | `1`                              | Set `0` to disable notifications              |
+| `WHISPER_SOUNDS`        | `1`                              | Set `0` to disable sounds                     |
 
 ---
 

@@ -88,9 +88,19 @@ SELECTED_MODEL=""
 
 if [ "${#EXISTING_MODELS[@]}" -eq 0 ]; then
     echo "==> No models found. Choose one to download:"
-    echo "    1) ggml-large-v3-turbo  (~800MB, recommended)"
-    echo "    2) ggml-large-v3        (~1.5GB, highest quality)"
-    echo "    3) ggml-medium          (~1.5GB, multilingual)"
+    echo
+    echo "    1) ggml-large-v3-turbo  (~800 MB, recommended)"
+    echo "       Fastest large model. Best speed/quality ratio."
+    echo "       Multilingual, auto-detect. Ideal for daily use."
+    echo
+    echo "    2) ggml-large-v3        (~1.5 GB, highest quality)"
+    echo "       Most accurate model. Slower transcription."
+    echo "       Best for long recordings or noisy environments."
+    echo
+    echo "    3) ggml-medium          (~1.5 GB, multilingual)"
+    echo "       Good balance. Supports all languages."
+    echo "       Smaller than large-v3 in accuracy, similar size."
+    echo
     echo "    4) Skip — I'll add a model manually"
     echo
     read -rp "    Choice [1]: " MODEL_CHOICE
@@ -229,3 +239,12 @@ echo "  6) Click the menubar icon (○) to switch models or browse history."
 echo
 echo "To change hotkeys: edit ${CONFIG_FILE} and reload Hammerspoon."
 echo "To change model:   use the menubar dropdown or edit WHISPER_MODEL_PATH in ${CONFIG_FILE}."
+
+# ── Launch Hammerspoon ────────────────────────────────────────────────────────
+
+if [ -d "/Applications/Hammerspoon.app" ] || [ -d "${HOME}/Applications/Hammerspoon.app" ]; then
+    echo
+    echo "==> Opening Hammerspoon..."
+    open -a Hammerspoon
+    echo "    If this is a fresh install, grant Accessibility permission when prompted."
+fi
