@@ -253,7 +253,9 @@
       </table>
       <h3>Dropdown Menu</h3>
       <p>
-        Clicking the menubar icon shows <strong>Toggle / Stop</strong> controls
+        Clicking the menubar icon shows <strong>Toggle / Stop</strong> controls,
+        <strong>Notifications / Sounds</strong> toggles,
+        a <strong>model selector</strong> to switch between all <code>.bin</code> files in <code>models/</code>,
         and a list of <strong>recent transcriptions</strong>. Click any history
         entry to copy it to the clipboard.
       </p>
@@ -294,7 +296,8 @@
 ├── whisper.sh            Main script
 ├── whisper_hotkeys.lua   Hammerspoon bindings + menubar
 ├── whisper-stt.conf      User configuration
-├── install.sh            One-shot installer
+├── install.sh            One-shot installer (auto-installs deps)
+├── uninstall.sh          Clean uninstaller
 ├── history.txt           Last 10 transcriptions (rolling)
 ├── models/
 │   ├── ggml-large-v3-turbo.bin   ← active
@@ -383,6 +386,16 @@
           <td><code>WHISPER_HISTORY_MAX</code></td>
           <td><code>10</code></td>
           <td>Max entries kept in history</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_NOTIFICATIONS</code></td>
+          <td><code>1</code></td>
+          <td>Set <code>0</code> to disable notifications</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_SOUNDS</code></td>
+          <td><code>1</code></td>
+          <td>Set <code>0</code> to disable sounds</td>
         </tr>
       </table>
 
@@ -488,6 +501,17 @@ bash -n ~/Scripts/Whisper/whisper.sh           # syntax check
       </table>
 
       <footer>~/Scripts/Whisper &mdash; local, private, no cloud</footer>
+
+      <!-- UNINSTALL -->
+      <h2>Uninstall</h2>
+      <pre>./uninstall.sh</pre>
+      <p>
+        Removes the Hammerspoon integration and temp files.
+        Optionally uninstalls <code>whisper-cpp</code>, <code>ffmpeg</code> and
+        Hammerspoon via Homebrew (asks before each).
+        The repo directory is kept &mdash; delete manually if desired.
+      </p>
+
     </div>
   </body>
 </html>

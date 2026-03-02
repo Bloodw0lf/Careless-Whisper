@@ -13,7 +13,8 @@ transcribe and auto-paste text.
 ├── whisper.sh           # Main script (record / transcribe / paste)
 ├── whisper_hotkeys.lua  # Hammerspoon hotkey bindings + menubar indicator
 ├── whisper-stt.conf     # User configuration (model path, language, …)
-├── install.sh           # One-shot installer
+├── install.sh           # One-shot installer (auto-installs dependencies)
+├── uninstall.sh         # Clean uninstaller
 ├── history.txt          # Last 10 transcriptions (rolling)
 ├── models/
 │   └── ggml-large-v3-turbo.bin   ← active model (downloaded by install.sh)
@@ -68,6 +69,8 @@ whisper.sh toggle
 Clicking the menubar icon opens a dropdown with:
 
 - **Toggle / Stop** controls
+- **Notifications / Sounds** toggles (on/off per setting)
+- **Model selector** — switch between all `.bin` models in `models/`
 - **Recent Transcriptions** — click any entry to copy it to the clipboard
 
 ## Installation
@@ -80,12 +83,25 @@ cd Careless_Whisper
 
 `install.sh` will:
 
-1. Check for `ffmpeg` and `whisper-cli`
-2. Download `ggml-large-v3-turbo.bin` (~800MB) if no model is present
-3. Create `whisper-stt.conf` with correct paths for the clone location
-4. Wire up `~/.hammerspoon/init.lua` to load the hotkeys
+1. Install `ffmpeg` and `whisper-cpp` via Homebrew if missing
+2. Optionally install Hammerspoon via `brew install --cask`
+3. Download `ggml-large-v3-turbo.bin` (~800MB) if no model is present
+4. Create `whisper-stt.conf` with correct paths for the clone location
+5. Wire up `~/.hammerspoon/init.lua` to load the hotkeys
 
 Then reload Hammerspoon config (menubar → Reload Config) and press `Ctrl+Cmd+W`.
+
+---
+
+## Uninstall
+
+```bash
+./uninstall.sh
+```
+
+Removes the Hammerspoon integration and temp files. Optionally uninstalls
+`whisper-cpp`, `ffmpeg` and Hammerspoon via Homebrew (asks before each).
+The repo directory is kept — delete manually if desired.
 
 ---
 
@@ -108,6 +124,8 @@ Then reload Hammerspoon config (menubar → Reload Config) and press `Ctrl+Cmd+W
 | `WHISPER_AUDIO_DEVICE` | `default`                        | Follows macOS input selection    |
 | `WHISPER_MAX_SECONDS`  | `7200`                           | Max recording length in seconds  |
 | `WHISPER_HISTORY_MAX`  | `10`                             | Max entries kept in history      |
+| `WHISPER_NOTIFICATIONS`| `1`                              | Set `0` to disable notifications |
+| `WHISPER_SOUNDS`       | `1`                              | Set `0` to disable sounds        |
 
 ---
 

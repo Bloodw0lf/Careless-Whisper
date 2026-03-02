@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#
+# Uninstall Whisper speech-to-text.
+# Removes Hammerspoon integration, temp files and optionally Homebrew packages.
+# Does NOT delete the repo directory itself — do that manually if desired.
+#
+# Usage: ./uninstall.sh
+#
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+HAMMERSPOON_INIT="${HOME}/.hammerspoon/init.lua"
+
+echo "==> Whisper STT uninstall"
+echo "    Root: ${ROOT_DIR}"
+echo
+
+# ── Remove Hammerspoon integration ──────────────────────────────────────────
+
+if [ -f "${HAMMERSPOON_INIT}" ]; then
+    if grep -q "whisper_hotkeys.lua" "${HAMMERSPOON_INIT}"; then
+        # Remove the pcall+dofile block and the comment above it
+        sed -i '' '/-- Whisper speech-to-text/,/^end)/d' "${HAMMERSPOON_INIT}" 2>/dev/null || true
+        sed -i '' '/whisper_hotkeys\.lua/d' "${HAMMERSPOON_INIT}" 2>/dev/null || true
+        # Clean up any leftover pcall wrapper lines
+        sed -i '' '/^pcall(function()$/,/^end)$/{ /whisper/!d; }' "${HAMMERSPOON_INIT}" 2>/dev/null || true
+        echo "==> Removed Whisper from ${HAMMERSPOON_INIT}"
+    else
+        echo "==> ${HAMMERSPOON_INIT} does not reference Whisper, skipping"
+    fi
+else
+    echo "==> No ${HAMMERSPOON_INIT} found, skipping"
+fi
+echo
+
+# ── Remove temp / runtime files ─────────────────────────────────────────────
+
+echo "==> Cleaning runtime files..."
+rm -f /tmp/whisper_recording.wav \
+      /tmp/whisper_recording.pid \
+      /tmp/whisper_output.txt \
+      /tmp/whisper_transcribing \
+      /tmp/ffmpeg.log \
+      /tmp/whisper-error.log
+echo "    Done"
+echo
+
+# ── Optionally remove Homebrew packages ──────────────────────────────────────
+
+if command -v brew >/dev/null 2>&1; then
+    echo "==> Optional: remove Homebrew packages installed for Whisper"
+    echo "    These may be used by other tools — only remove if you're sure."
+    echo
+
+    for pkg in whisper-cpp ffmpeg; do
+        if brew list "${pkg}" >/dev/null 2>&1; then
+            read -rp "    Uninstall ${pkg}? [y/N]: " REMOVE
+            if [[ "${REMOVE}" =~ ^[Yy]$ ]]; then
+                brew uninstall "${pkg}"
+                echo "    Removed ${pkg}"
+            else
+                echo "    Kept ${pkg}"
+            fi
+        fi
+    done
+
+    if [ -d "/Applications/Hammerspoon.app" ] || [ -d "${HOME}/Applications/Hammerspoon.app" ]; then
+        read -rp "    Uninstall Hammerspoon? [y/N]: " REMOVE_HS
+        if [[ "${REMOVE_HS}" =~ ^[Yy]$ ]]; then
+            brew uninstall --cask hammerspoon 2>/dev/null || true
+            echo "    Removed Hammerspoon"
+        else
+            echo "    Kept Hammerspoon"
+        fi
+    fi
+fi
+echo
+
+# ── Summary ──────────────────────────────────────────────────────────────────
+
+echo "==> Uninstall complete."
+echo
+echo "    The repo directory was NOT deleted: ${ROOT_DIR}"
+echo "    To remove it:  rm -rf \"${ROOT_DIR}\""
+echo
+echo "    If Hammerspoon is still running, reload its config to"
+echo "    clear the Whisper menubar icon."
