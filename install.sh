@@ -22,21 +22,42 @@ echo "==> Whisper STT install"
 echo "    Root: ${ROOT_DIR}"
 echo
 
-# ── Dependency checks ────────────────────────────────────────────────────────
+# ── Dependency checks & auto-install ─────────────────────────────────────────
 
-if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "ERROR: ffmpeg not found. Install with: brew install ffmpeg"
-    exit 1
-fi
+install_brew_pkg() {
+    local cmd="$1"
+    local pkg="$2"
 
-if ! command -v whisper-cli >/dev/null 2>&1; then
-    echo "ERROR: whisper-cli not found. Install with: brew install whisper-cpp"
-    exit 1
-fi
+    if command -v "${cmd}" >/dev/null 2>&1; then
+        return 0
+    fi
 
-if [ ! -d "/Applications/Hammerspoon.app" ]; then
-    echo "WARN:  Hammerspoon not found at /Applications/Hammerspoon.app"
-    echo "       Download from https://www.hammerspoon.org"
+    if ! command -v brew >/dev/null 2>&1; then
+        echo "ERROR: ${cmd} not found and Homebrew is not installed."
+        echo "       Install Homebrew first: https://brew.sh"
+        exit 1
+    fi
+
+    echo "==> ${cmd} not found — installing ${pkg} via Homebrew..."
+    brew install "${pkg}"
+
+    if ! command -v "${cmd}" >/dev/null 2>&1; then
+        echo "ERROR: ${cmd} still not found after brew install ${pkg}"
+        exit 1
+    fi
+}
+
+install_brew_pkg ffmpeg ffmpeg
+install_brew_pkg whisper-cli whisper-cpp
+
+if [ ! -d "/Applications/Hammerspoon.app" ] && [ ! -d "${HOME}/Applications/Hammerspoon.app" ]; then
+    echo "WARN:  Hammerspoon not found."
+    echo "       Install with: brew install --cask hammerspoon"
+    read -rp "       Install now? [Y/n]: " HS_INSTALL
+    HS_INSTALL="${HS_INSTALL:-Y}"
+    if [[ "${HS_INSTALL}" =~ ^[Yy]$ ]]; then
+        brew install --cask hammerspoon
+    fi
 fi
 
 echo "    ffmpeg:      $(command -v ffmpeg)"
