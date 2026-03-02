@@ -41,6 +41,9 @@ local spinner_frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 local spinner_index = 1
 local spinner_timer = nil
 local recording_start = nil
+local recording_display_timer = nil
+local current_state = "idle"
+local status_poll_running = false
 
 local function format_duration(seconds)
     local m = math.floor(seconds / 60)
@@ -69,29 +72,44 @@ end
 
 local function set_indicator(state)
     if not status_item then return end
+    current_state = state
 
     if state == "transcribing" then
+        if recording_display_timer then recording_display_timer:stop(); recording_display_timer = nil end
         recording_start = nil
         start_spinner()
-    else
+    elseif state == "recording" then
         stop_spinner()
-        if state == "recording" then
-            if not recording_start then
-                recording_start = os.time()
-            end
+        if not recording_start then
+            recording_start = os.time()
+        end
+        -- Dedicated 1-second timer for smooth elapsed counter
+        if not recording_display_timer then
             local elapsed = os.time() - recording_start
             status_item:setTitle("● " .. format_duration(elapsed))
             status_item:setTooltip("Whisper: recording")
-        else
-            recording_start = nil
-            status_item:setTitle("○")
-            status_item:setTooltip("Whisper: idle")
+            recording_display_timer = hs.timer.doEvery(1.0, function()
+                if recording_start and status_item then
+                    local e = os.time() - recording_start
+                    status_item:setTitle("● " .. format_duration(e))
+                end
+            end)
         end
+    else
+        stop_spinner()
+        if recording_display_timer then recording_display_timer:stop(); recording_display_timer = nil end
+        recording_start = nil
+        status_item:setTitle("○")
+        status_item:setTooltip("Whisper: idle")
     end
 end
 
 local function update_indicator()
+    if status_poll_running then return end
+    status_poll_running = true
+
     local task = hs.task.new(whisper_script, function(exit_code, std_out, _)
+        status_poll_running = false
         if exit_code == 0 and std_out then
             if std_out:match("transcribing:%s+yes") then
                 set_indicator("transcribing")
@@ -100,16 +118,15 @@ local function update_indicator()
             else
                 set_indicator("idle")
             end
-        else
-            set_indicator("idle")
         end
+        -- On poll failure, keep current state instead of resetting to idle
         return false
     end, {"status"})
 
     if task then
         task:start()
     else
-        set_indicator("idle")
+        status_poll_running = false
     end
 end
 
@@ -120,6 +137,11 @@ local function run_whisper(action)
     if action == "toggle" and whisper_busy then
         hs.alert.show("Whisper: transcription in progress…")
         return
+    end
+
+    -- Optimistic UI: show spinner immediately when stopping recording
+    if current_state == "recording" and (action == "toggle" or action == "stop") then
+        set_indicator("transcribing")
     end
 
     whisper_busy = true
@@ -191,10 +213,12 @@ local function stop_download_progress()
         download_progress_timer:stop()
         download_progress_timer = nil
     end
-    -- Restore idle menubar
-    if status_item then
-        status_item:setTitle("○")
-        status_item:setTooltip("Whisper: idle")
+    -- Only restore idle menubar if not recording/transcribing
+    if current_state ~= "recording" and current_state ~= "transcribing" then
+        if status_item then
+            status_item:setTitle("○")
+            status_item:setTooltip("Whisper: idle")
+        end
     end
 end
 
