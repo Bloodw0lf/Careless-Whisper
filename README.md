@@ -7,8 +7,8 @@ Uses [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for transcription a
 ## Quick Start
 
 ```bash
-git clone <this-repo-url> ~/Scripts/Careless-Whisper
-cd ~/Scripts/Careless-Whisper
+git clone https://github.com/Bloodw0lf/Careless-Whisper.git
+cd Careless-Whisper
 ./install.sh
 ```
 
