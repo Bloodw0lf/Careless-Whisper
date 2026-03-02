@@ -8,21 +8,36 @@ transcribe and auto-paste text.
 
 ## File Structure
 
+**Repository (what you clone):**
+
 ```
-~/Scripts/Whisper/
+Careless-Whisper/
 ├── whisper.sh           # Main script (record / transcribe / paste)
 ├── whisper_hotkeys.lua  # Hammerspoon hotkey bindings + menubar indicator
-├── whisper-stt.conf     # User configuration (model path, language, …)
-├── install.sh           # One-shot installer (auto-installs dependencies)
+├── install.sh           # Installer (auto-installs dependencies via Homebrew)
 ├── uninstall.sh         # Clean uninstaller
-├── history.txt          # Last 10 transcriptions (rolling)
-├── models/
-│   └── ggml-large-v3-turbo.bin   ← active model (downloaded by install.sh)
-├── README.md            # This file (AI-readable project reference)
+├── README.md            # This file
 └── index.html           # Human-readable docs (open in browser)
-
-~/.hammerspoon/init.lua  # Loads whisper_hotkeys.lua from clone directory
 ```
+
+**Generated locally (gitignored):**
+
+```
+Careless-Whisper/
+├── whisper-stt.conf     # User configuration — created by install.sh
+├── history.txt          # Rolling transcription log (last N entries)
+└── models/              # Downloaded by install.sh, selectable via menubar
+    └── ggml-*.bin       # e.g. ggml-large-v3-turbo.bin (~800 MB)
+
+~/.hammerspoon/init.lua  # Patched by install.sh to load whisper_hotkeys.lua
+```
+
+Available models (downloaded on first install or manually):
+
+- `ggml-large-v3-turbo` — ~800 MB, fast, recommended
+- `ggml-large-v3` — ~1.5 GB, highest quality
+- `ggml-medium` — ~1.5 GB, multilingual
+- `ggml-medium.en` — ~1.5 GB, English-only
 
 ---
 
@@ -73,11 +88,13 @@ Clicking the menubar icon opens a dropdown with:
 - **Model selector** — switch between all `.bin` models in `models/`
 - **Recent Transcriptions** — click any entry to copy it to the clipboard
 
+---
+
 ## Installation
 
 ```bash
-git clone https://github.com/bpleger_cisco/Careless_Whisper.git
-cd Careless_Whisper
+git clone https://github.com/Bloodw0lf/Careless-Whisper.git
+cd Careless-Whisper
 ./install.sh
 ```
 
@@ -85,9 +102,10 @@ cd Careless_Whisper
 
 1. Install `ffmpeg` and `whisper-cpp` via Homebrew if missing
 2. Optionally install Hammerspoon via `brew install --cask`
-3. Download `ggml-large-v3-turbo.bin` (~800MB) if no model is present
-4. Create `whisper-stt.conf` with correct paths for the clone location
-5. Wire up `~/.hammerspoon/init.lua` to load the hotkeys
+3. Download a whisper model (~800 MB+) if `models/` is empty
+4. Let you choose between available models if multiple exist
+5. Create `whisper-stt.conf` with correct paths for the clone location
+6. Wire up `~/.hammerspoon/init.lua` to load the hotkeys
 
 Then reload Hammerspoon config (menubar → Reload Config) and press `Ctrl+Cmd+W`.
 
@@ -115,17 +133,17 @@ The repo directory is kept — delete manually if desired.
 
 ## Configuration (`whisper-stt.conf`)
 
-| Variable               | Default                          | Description                      |
-| ---------------------- | -------------------------------- | -------------------------------- |
-| `WHISPER_MODEL_PATH`   | `models/ggml-large-v3-turbo.bin` | Path to model file               |
-| `WHISPER_LANGUAGE`     | `auto`                           | Language or `auto` for detection |
-| `WHISPER_TRANSLATE`    | `0`                              | Set `1` to translate to English  |
-| `WHISPER_AUTO_PASTE`   | `1`                              | Auto-paste after transcription   |
-| `WHISPER_AUDIO_DEVICE` | `default`                        | Follows macOS input selection    |
-| `WHISPER_MAX_SECONDS`  | `7200`                           | Max recording length in seconds  |
-| `WHISPER_HISTORY_MAX`  | `10`                             | Max entries kept in history      |
-| `WHISPER_NOTIFICATIONS`| `1`                              | Set `0` to disable notifications |
-| `WHISPER_SOUNDS`       | `1`                              | Set `0` to disable sounds        |
+| Variable                | Default                          | Description                      |
+| ----------------------- | -------------------------------- | -------------------------------- |
+| `WHISPER_MODEL_PATH`    | `models/ggml-large-v3-turbo.bin` | Path to active model (switchable via menubar) |
+| `WHISPER_LANGUAGE`      | `auto`                           | Language or `auto` for detection |
+| `WHISPER_TRANSLATE`     | `0`                              | Set `1` to translate to English  |
+| `WHISPER_AUTO_PASTE`    | `1`                              | Auto-paste after transcription   |
+| `WHISPER_AUDIO_DEVICE`  | `default`                        | Follows macOS input selection    |
+| `WHISPER_MAX_SECONDS`   | `7200`                           | Max recording length in seconds  |
+| `WHISPER_HISTORY_MAX`   | `10`                             | Max entries kept in history      |
+| `WHISPER_NOTIFICATIONS` | `1`                              | Set `0` to disable notifications |
+| `WHISPER_SOUNDS`        | `1`                              | Set `0` to disable sounds        |
 
 ---
 
