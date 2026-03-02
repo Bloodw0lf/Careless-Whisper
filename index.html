@@ -1,197 +1,296 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Whisper STT – Setup Docs</title>
-  <style>
-    :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --border: #2a2d3a;
-      --accent: #7c6af7;
-      --accent2: #4fc3f7;
-      --green: #4caf82;
-      --red: #e06c75;
-      --text: #d4d8e8;
-      --muted: #6b7080;
-      --code-bg: #13151f;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 15px;
-      line-height: 1.7;
-      padding: 2rem 1rem;
-    }
-    .wrap { max-width: 860px; margin: 0 auto; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Whisper STT – Setup Docs</title>
+    <style>
+      :root {
+        --bg: #0f1117;
+        --surface: #1a1d27;
+        --border: #2a2d3a;
+        --accent: #7c6af7;
+        --accent2: #4fc3f7;
+        --green: #4caf82;
+        --red: #e06c75;
+        --text: #d4d8e8;
+        --muted: #6b7080;
+        --code-bg: #13151f;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 15px;
+        line-height: 1.7;
+        padding: 2rem 1rem;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+      }
 
-    header {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 1.5rem;
-      margin-bottom: 2.5rem;
-    }
-    header h1 { font-size: 1.8rem; color: #fff; }
-    header p { color: var(--muted); margin-top: .4rem; }
+      header {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 1.5rem;
+        margin-bottom: 2.5rem;
+      }
+      header h1 {
+        font-size: 1.8rem;
+        color: #fff;
+      }
+      header p {
+        color: var(--muted);
+        margin-top: 0.4rem;
+      }
 
-    h2 {
-      font-size: 1.1rem;
-      color: var(--accent2);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      margin: 2.5rem 0 1rem;
-      padding-bottom: .4rem;
-      border-bottom: 1px solid var(--border);
-    }
-    h3 { font-size: .95rem; color: var(--accent); margin: 1.2rem 0 .5rem; }
+      h2 {
+        font-size: 1.1rem;
+        color: var(--accent2);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 2.5rem 0 1rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 0.95rem;
+        color: var(--accent);
+        margin: 1.2rem 0 0.5rem;
+      }
 
-    pre, code {
-      font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
-      font-size: .85rem;
-    }
-    pre {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem 1.2rem;
-      overflow-x: auto;
-      margin: .8rem 0;
-    }
-    code { background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+      pre,
+      code {
+        font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+        font-size: 0.85rem;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem 1.2rem;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+      }
+      code {
+        background: var(--code-bg);
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+      }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: .8rem 0;
-      font-size: .88rem;
-    }
-    th {
-      background: var(--surface);
-      color: var(--accent2);
-      font-weight: 600;
-      text-align: left;
-      padding: .55rem .8rem;
-      border-bottom: 2px solid var(--border);
-    }
-    td {
-      padding: .5rem .8rem;
-      border-bottom: 1px solid var(--border);
-      vertical-align: top;
-    }
-    tr:last-child td { border-bottom: none; }
-    td code { font-size: .82rem; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.88rem;
+      }
+      th {
+        background: var(--surface);
+        color: var(--accent2);
+        font-weight: 600;
+        text-align: left;
+        padding: 0.55rem 0.8rem;
+        border-bottom: 2px solid var(--border);
+      }
+      td {
+        padding: 0.5rem 0.8rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td code {
+        font-size: 0.82rem;
+      }
 
-    .badge {
-      display: inline-block;
-      padding: .15em .55em;
-      border-radius: 4px;
-      font-size: .78rem;
-      font-weight: 600;
-      font-family: monospace;
-    }
-    .badge-idle     { background: #2a2d3a; color: #9ba3b8; }
-    .badge-rec      { background: #3b1f1f; color: var(--red); }
-    .badge-busy     { background: #1f2c3b; color: var(--accent2); }
+      .badge {
+        display: inline-block;
+        padding: 0.15em 0.55em;
+        border-radius: 4px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        font-family: monospace;
+      }
+      .badge-idle {
+        background: #2a2d3a;
+        color: #9ba3b8;
+      }
+      .badge-rec {
+        background: #3b1f1f;
+        color: var(--red);
+      }
+      .badge-busy {
+        background: #1f2c3b;
+        color: var(--accent2);
+      }
 
-    .flow {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1.2rem 1.4rem;
-      font-family: monospace;
-      font-size: .83rem;
-      line-height: 2;
-      color: var(--muted);
-    }
-    .flow .hi { color: var(--text); }
-    .flow .acc { color: var(--accent); }
-    .flow .acc2 { color: var(--accent2); }
+      .flow {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.2rem 1.4rem;
+        font-family: monospace;
+        font-size: 0.83rem;
+        line-height: 2;
+        color: var(--muted);
+      }
+      .flow .hi {
+        color: var(--text);
+      }
+      .flow .acc {
+        color: var(--accent);
+      }
+      .flow .acc2 {
+        color: var(--accent2);
+      }
 
-    .card-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: .8rem;
-      margin: .8rem 0;
-    }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: .9rem 1rem;
-    }
-    .card .label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
-    .card .value { font-size: .95rem; color: var(--text); margin-top: .2rem; font-family: monospace; }
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.8rem;
+        margin: 0.8rem 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+      }
+      .card .label {
+        font-size: 0.75rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+      .card .value {
+        font-size: 0.95rem;
+        color: var(--text);
+        margin-top: 0.2rem;
+        font-family: monospace;
+      }
 
-    .warn-list { list-style: none; padding: 0; }
-    .warn-list li {
-      background: var(--surface);
-      border-left: 3px solid var(--accent);
-      border-radius: 0 6px 6px 0;
-      padding: .55rem .9rem;
-      margin-bottom: .5rem;
-      font-size: .88rem;
-    }
-    .warn-list li strong { color: var(--accent2); }
+      .warn-list {
+        list-style: none;
+        padding: 0;
+      }
+      .warn-list li {
+        background: var(--surface);
+        border-left: 3px solid var(--accent);
+        border-radius: 0 6px 6px 0;
+        padding: 0.55rem 0.9rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.88rem;
+      }
+      .warn-list li strong {
+        color: var(--accent2);
+      }
 
-    footer {
-      margin-top: 3rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--border);
-      font-size: .8rem;
-      color: var(--muted);
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-<div class="wrap">
+      footer {
+        margin-top: 3rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>Whisper STT &mdash; macOS Setup</h1>
+        <p>
+          System-wide local speech-to-text via whisper.cpp + Hammerspoon. Works
+          in any app: Terminal, Claude Code, browser, Outlook&hellip;
+        </p>
+      </header>
 
-  <header>
-    <h1>Whisper STT &mdash; macOS Setup</h1>
-    <p>System-wide local speech-to-text via whisper.cpp + Hammerspoon.
-       Works in any app: Terminal, Claude Code, browser, Outlook&hellip;</p>
-  </header>
+      <!-- HOTKEYS -->
+      <h2>Hotkeys</h2>
+      <table>
+        <tr>
+          <th>Shortcut</th>
+          <th>Action</th>
+        </tr>
+        <tr>
+          <td><code>Ctrl+Cmd+W</code></td>
+          <td>
+            Toggle recording — first press starts, second press stops +
+            transcribes + pastes
+          </td>
+        </tr>
+        <tr>
+          <td><code>Ctrl+Cmd+Q</code></td>
+          <td>Stop recording immediately (emergency stop)</td>
+        </tr>
+      </table>
 
-  <!-- HOTKEYS -->
-  <h2>Hotkeys</h2>
-  <table>
-    <tr><th>Shortcut</th><th>Action</th></tr>
-    <tr><td><code>Ctrl+Cmd+W</code></td><td>Toggle recording — first press starts, second press stops + transcribes + pastes</td></tr>
-    <tr><td><code>Ctrl+Cmd+Q</code></td><td>Stop recording immediately (emergency stop)</td></tr>
-  </table>
+      <!-- MENUBAR -->
+      <h2>Menubar Indicator</h2>
+      <table>
+        <tr>
+          <th>Symbol</th>
+          <th>State</th>
+        </tr>
+        <tr>
+          <td><span class="badge badge-idle">○</span></td>
+          <td>Idle</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-rec">● 0:12</span></td>
+          <td>Recording (with elapsed time)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-busy">⠋⠙⠹…</span></td>
+          <td>Transcribing (whisper-cli running)</td>
+        </tr>
+      </table>
+      <h3>Dropdown Menu</h3>
+      <p>
+        Clicking the menubar icon shows <strong>Toggle / Stop</strong> controls
+        and a list of <strong>recent transcriptions</strong>. Click any history
+        entry to copy it to the clipboard.
+      </p>
 
-  <!-- MENUBAR -->
-  <h2>Menubar Indicator</h2>
-  <table>
-    <tr><th>Symbol</th><th>State</th></tr>
-    <tr><td><span class="badge badge-idle">○</span></td><td>Idle</td></tr>
-    <tr><td><span class="badge badge-rec">●</span></td><td>Recording</td></tr>
-    <tr><td><span class="badge badge-busy">⠋⠙⠹…</span></td><td>Transcribing (whisper-cli running)</td></tr>
-  </table>
+      <!-- ARCHITECTURE -->
+      <h2>Architecture</h2>
+      <div class="flow">
+        <span class="acc2">Ctrl+Cmd+W</span><br />
+        &nbsp;&nbsp;&nbsp;↓<br />
+        <span class="hi">Hammerspoon</span>
+        <span class="acc">(whisper_hotkeys.lua)</span><br />
+        &nbsp;&nbsp;&nbsp;↓ hs.task.new()<br />
+        <span class="hi">whisper.sh toggle</span><br />
+        &nbsp;&nbsp;&nbsp;├─ <span class="acc">[start]</span> ffmpeg records →
+        <code>/tmp/whisper_recording.wav</code><br />
+        &nbsp;&nbsp;&nbsp;└─ <span class="acc">[stop]</span><br />
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ touch
+        <code>/tmp/whisper_transcribing</code> &nbsp;<span class="acc2"
+          >← spinner startet</span
+        ><br />
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ whisper-cli
+        transcribes<br />
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ rm
+        <code>/tmp/whisper_transcribing</code> &nbsp;<span class="acc2"
+          >← spinner stoppt</span
+        ><br />
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ append to
+        <code>history.txt</code> (rolling 10)<br />
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ copy to clipboard<br />
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ auto-paste via
+        AppleScript
+      </div>
 
-  <!-- ARCHITECTURE -->
-  <h2>Architecture</h2>
-  <div class="flow">
-    <span class="acc2">Ctrl+Cmd+W</span><br>
-    &nbsp;&nbsp;&nbsp;↓<br>
-    <span class="hi">Hammerspoon</span> <span class="acc">(whisper_hotkeys.lua)</span><br>
-    &nbsp;&nbsp;&nbsp;↓ hs.task.new()<br>
-    <span class="hi">whisper.sh toggle</span><br>
-    &nbsp;&nbsp;&nbsp;├─ <span class="acc">[start]</span>  ffmpeg records → <code>/tmp/whisper_recording.wav</code><br>
-    &nbsp;&nbsp;&nbsp;└─ <span class="acc">[stop]</span><br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ touch <code>/tmp/whisper_transcribing</code> &nbsp;<span class="acc2">← spinner startet</span><br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ whisper-cli transcribes<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ rm <code>/tmp/whisper_transcribing</code> &nbsp;<span class="acc2">← spinner stoppt</span><br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ append to <code>history.txt</code> (rolling 10)<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ copy to clipboard<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ auto-paste via AppleScript
-  </div>
-
-  <!-- FILE STRUCTURE -->
-  <h2>File Structure</h2>
-  <pre>~/Scripts/Whisper/
+      <!-- FILE STRUCTURE -->
+      <h2>File Structure</h2>
+      <pre>
+~/Scripts/Whisper/
 ├── whisper.sh            Main script
 ├── whisper_hotkeys.lua   Hammerspoon bindings + menubar
 ├── whisper-stt.conf      User configuration
@@ -205,74 +304,190 @@
 ├── README.md             AI-readable project reference
 └── index.html            This file
 
-~/.hammerspoon/init.lua   Loads whisper_hotkeys.lua</pre>
+~/.hammerspoon/init.lua   Loads whisper_hotkeys.lua</pre
+      >
 
-  <!-- ACTIVE CONFIG -->
-  <h2>Active Configuration</h2>
-  <div class="card-grid">
-    <div class="card"><div class="label">Model</div><div class="value">ggml-large-v3-turbo</div></div>
-    <div class="card"><div class="label">Language</div><div class="value">auto</div></div>
-    <div class="card"><div class="label">Auto-paste</div><div class="value">enabled</div></div>
-    <div class="card"><div class="label">Audio device</div><div class="value">default</div></div>
-    <div class="card"><div class="label">Max recording</div><div class="value">7200 s</div></div>
-    <div class="card"><div class="label">History limit</div><div class="value">10 entries</div></div>
-  </div>
+      <!-- ACTIVE CONFIG -->
+      <h2>Active Configuration</h2>
+      <div class="card-grid">
+        <div class="card">
+          <div class="label">Model</div>
+          <div class="value">ggml-large-v3-turbo</div>
+        </div>
+        <div class="card">
+          <div class="label">Language</div>
+          <div class="value">auto</div>
+        </div>
+        <div class="card">
+          <div class="label">Auto-paste</div>
+          <div class="value">enabled</div>
+        </div>
+        <div class="card">
+          <div class="label">Audio device</div>
+          <div class="value">default</div>
+        </div>
+        <div class="card">
+          <div class="label">Max recording</div>
+          <div class="value">7200 s</div>
+        </div>
+        <div class="card">
+          <div class="label">History limit</div>
+          <div class="value">10 entries</div>
+        </div>
+      </div>
 
-  <!-- ALL CONFIG VARS -->
-  <h2>All Config Variables (<code>whisper-stt.conf</code>)</h2>
-  <table>
-    <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
-    <tr><td><code>WHISPER_MODEL_PATH</code></td><td><code>models/ggml-large-v3-turbo.bin</code></td><td>Path to GGML model file</td></tr>
-    <tr><td><code>WHISPER_LANGUAGE</code></td><td><code>auto</code></td><td>Language code or <code>auto</code></td></tr>
-    <tr><td><code>WHISPER_TRANSLATE</code></td><td><code>0</code></td><td>Set <code>1</code> to translate output to English</td></tr>
-    <tr><td><code>WHISPER_AUTO_PASTE</code></td><td><code>1</code></td><td>Auto-paste after transcription</td></tr>
-    <tr><td><code>WHISPER_AUDIO_DEVICE</code></td><td><code>default</code></td><td>AVFoundation device name or index</td></tr>
-    <tr><td><code>WHISPER_MAX_SECONDS</code></td><td><code>7200</code></td><td>Max recording duration</td></tr>
-    <tr><td><code>WHISPER_HISTORY_FILE</code></td><td><code>history.txt</code></td><td>Rolling transcription log path</td></tr>
-    <tr><td><code>WHISPER_HISTORY_MAX</code></td><td><code>10</code></td><td>Max entries kept in history</td></tr>
-  </table>
+      <!-- ALL CONFIG VARS -->
+      <h2>All Config Variables (<code>whisper-stt.conf</code>)</h2>
+      <table>
+        <tr>
+          <th>Variable</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td><code>WHISPER_MODEL_PATH</code></td>
+          <td><code>models/ggml-large-v3-turbo.bin</code></td>
+          <td>Path to GGML model file</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_LANGUAGE</code></td>
+          <td><code>auto</code></td>
+          <td>Language code or <code>auto</code></td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_TRANSLATE</code></td>
+          <td><code>0</code></td>
+          <td>Set <code>1</code> to translate output to English</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_AUTO_PASTE</code></td>
+          <td><code>1</code></td>
+          <td>Auto-paste after transcription</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_AUDIO_DEVICE</code></td>
+          <td><code>default</code></td>
+          <td>AVFoundation device name or index</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_MAX_SECONDS</code></td>
+          <td><code>7200</code></td>
+          <td>Max recording duration</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_HISTORY_FILE</code></td>
+          <td><code>history.txt</code></td>
+          <td>Rolling transcription log path</td>
+        </tr>
+        <tr>
+          <td><code>WHISPER_HISTORY_MAX</code></td>
+          <td><code>10</code></td>
+          <td>Max entries kept in history</td>
+        </tr>
+      </table>
 
-  <!-- RUNTIME FILES -->
-  <h2>Runtime / Temp Files</h2>
-  <table>
-    <tr><th>Path</th><th>Purpose</th></tr>
-    <tr><td><code>/tmp/whisper_recording.wav</code></td><td>Audio captured by ffmpeg</td></tr>
-    <tr><td><code>/tmp/whisper_output.txt</code></td><td>Raw whisper-cli output</td></tr>
-    <tr><td><code>/tmp/whisper_transcribing</code></td><td>Marker file — exists while whisper-cli runs</td></tr>
-    <tr><td><code>/tmp/ffmpeg.log</code></td><td>ffmpeg stderr (debug recording issues)</td></tr>
-    <tr><td><code>/tmp/whisper-error.log</code></td><td>whisper-cli stderr (debug transcription)</td></tr>
-  </table>
+      <!-- RUNTIME FILES -->
+      <h2>Runtime / Temp Files</h2>
+      <table>
+        <tr>
+          <th>Path</th>
+          <th>Purpose</th>
+        </tr>
+        <tr>
+          <td><code>/tmp/whisper_recording.wav</code></td>
+          <td>Audio captured by ffmpeg</td>
+        </tr>
+        <tr>
+          <td><code>/tmp/whisper_output.txt</code></td>
+          <td>Raw whisper-cli output</td>
+        </tr>
+        <tr>
+          <td><code>/tmp/whisper_transcribing</code></td>
+          <td>Marker file — exists while whisper-cli runs</td>
+        </tr>
+        <tr>
+          <td><code>/tmp/ffmpeg.log</code></td>
+          <td>ffmpeg stderr (debug recording issues)</td>
+        </tr>
+        <tr>
+          <td><code>/tmp/whisper-error.log</code></td>
+          <td>whisper-cli stderr (debug transcription)</td>
+        </tr>
+      </table>
 
-  <!-- TESTING -->
-  <h2>Manual Testing</h2>
-  <pre>bash -n ~/Scripts/Whisper/whisper.sh           # syntax check
+      <!-- TESTING -->
+      <h2>Manual Testing</h2>
+      <pre>
+bash -n ~/Scripts/Whisper/whisper.sh           # syntax check
 ~/Scripts/Whisper/whisper.sh status            # current state
 ~/Scripts/Whisper/whisper.sh list-devices      # audio inputs
 ~/Scripts/Whisper/whisper.sh start             # start recording
-~/Scripts/Whisper/whisper.sh stop              # stop + transcribe</pre>
+~/Scripts/Whisper/whisper.sh stop              # stop + transcribe</pre
+      >
 
-  <!-- PITFALLS -->
-  <h2>Pitfalls &amp; Common Mistakes</h2>
-  <ul class="warn-list">
-    <li><strong>Hotkey does nothing</strong> — Hammerspoon config not reloaded. Menubar → Reload Config.</li>
-    <li><strong>No audio output</strong> — Wrong device index. Run <code>whisper.sh list-devices</code> and adjust <code>WHISPER_AUDIO_DEVICE</code>.</li>
-    <li><strong>whisper-cli not found</strong> — PATH not available in Hammerspoon. <code>find_bin()</code> checks Homebrew paths first.</li>
-    <li><strong>Spinner stays on</strong> — <code>/tmp/whisper_transcribing</code> not removed. Check error path in <code>stop_recording()</code>.</li>
-    <li><strong>Model rejected for language</strong> — <code>.en.bin</code> models refuse non-English. Switch model or set <code>WHISPER_LANGUAGE=en</code>.</li>
-    <li><strong>F5 / Cmd+numbers</strong> — macOS Dictation owns F5; many apps use Cmd+number for tabs. Use <code>Ctrl+Cmd</code> combos.</li>
-  </ul>
+      <!-- PITFALLS -->
+      <h2>Pitfalls &amp; Common Mistakes</h2>
+      <ul class="warn-list">
+        <li>
+          <strong>Hotkey does nothing</strong> — Hammerspoon config not
+          reloaded. Menubar → Reload Config.
+        </li>
+        <li>
+          <strong>No audio output</strong> — Wrong device index. Run
+          <code>whisper.sh list-devices</code> and adjust
+          <code>WHISPER_AUDIO_DEVICE</code>.
+        </li>
+        <li>
+          <strong>whisper-cli not found</strong> — PATH not available in
+          Hammerspoon. <code>find_bin()</code> checks Homebrew paths first.
+        </li>
+        <li>
+          <strong>Spinner stays on</strong> —
+          <code>/tmp/whisper_transcribing</code> not removed. Auto-cleaned after
+          10 min; check error path in <code>stop_recording()</code>.
+        </li>
+        <li>
+          <strong>Hotkey ignored during transcription</strong> — Expected
+          behaviour. The toggle hotkey is locked while whisper-cli is running.
+          Wait for the transcription to finish.
+        </li>
+        <li>
+          <strong>Model rejected for language</strong> —
+          <code>.en.bin</code> models refuse non-English. Switch model or set
+          <code>WHISPER_LANGUAGE=en</code>.
+        </li>
+        <li>
+          <strong>F5 / Cmd+numbers</strong> — macOS Dictation owns F5; many apps
+          use Cmd+number for tabs. Use <code>Ctrl+Cmd</code> combos.
+        </li>
+      </ul>
 
-  <!-- DEPENDENCIES -->
-  <h2>Dependencies</h2>
-  <table>
-    <tr><th>Tool</th><th>Install</th><th>Used for</th></tr>
-    <tr><td>ffmpeg</td><td><code>brew install ffmpeg</code></td><td>Audio capture from microphone</td></tr>
-    <tr><td>whisper-cli</td><td><code>brew install whisper-cpp</code></td><td>Local transcription</td></tr>
-    <tr><td>Hammerspoon</td><td>hammerspoon.org</td><td>Global hotkeys + menubar indicator</td></tr>
-  </table>
+      <!-- DEPENDENCIES -->
+      <h2>Dependencies</h2>
+      <table>
+        <tr>
+          <th>Tool</th>
+          <th>Install</th>
+          <th>Used for</th>
+        </tr>
+        <tr>
+          <td>ffmpeg</td>
+          <td><code>brew install ffmpeg</code></td>
+          <td>Audio capture from microphone</td>
+        </tr>
+        <tr>
+          <td>whisper-cli</td>
+          <td><code>brew install whisper-cpp</code></td>
+          <td>Local transcription</td>
+        </tr>
+        <tr>
+          <td>Hammerspoon</td>
+          <td>hammerspoon.org</td>
+          <td>Global hotkeys + menubar indicator</td>
+        </tr>
+      </table>
 
-  <footer>~/Scripts/Whisper &mdash; local, private, no cloud</footer>
-
-</div>
-</body>
+      <footer>~/Scripts/Whisper &mdash; local, private, no cloud</footer>
+    </div>
+  </body>
 </html>

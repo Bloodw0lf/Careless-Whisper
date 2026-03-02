@@ -50,22 +50,25 @@ whisper.sh toggle
 
 ## Hotkeys
 
-| Shortcut        | Action                                      |
-|-----------------|---------------------------------------------|
-| `Ctrl+Cmd+W`    | Toggle recording (start / stop+transcribe)  |
-| `Ctrl+Cmd+Q`    | Stop recording immediately (emergency)      |
+| Shortcut     | Action                                     |
+| ------------ | ------------------------------------------ |
+| `Ctrl+Cmd+W` | Toggle recording (start / stop+transcribe) |
+| `Ctrl+Cmd+Q` | Stop recording immediately (emergency)     |
 
 ---
 
 ## Menubar Indicator
 
-| Symbol          | State                                      |
-|-----------------|--------------------------------------------|
-| `○`             | Idle                                       |
-| `●`             | Recording                                  |
-| `⠋⠙⠹…` (spin) | Transcribing (whisper-cli running)         |
+| Symbol        | State                              |
+| ------------- | ---------------------------------- |
+| `○`           | Idle                               |
+| `● 0:12`      | Recording (with elapsed time)      |
+| `⠋⠙⠹…` (spin) | Transcribing (whisper-cli running) |
 
----
+Clicking the menubar icon opens a dropdown with:
+
+- **Toggle / Stop** controls
+- **Recent Transcriptions** — click any entry to copy it to the clipboard
 
 ## Installation
 
@@ -76,6 +79,7 @@ cd Careless_Whisper
 ```
 
 `install.sh` will:
+
 1. Check for `ffmpeg` and `whisper-cli`
 2. Download `ggml-large-v3-turbo.bin` (~800MB) if no model is present
 3. Create `whisper-stt.conf` with correct paths for the clone location
@@ -95,15 +99,15 @@ Then reload Hammerspoon config (menubar → Reload Config) and press `Ctrl+Cmd+W
 
 ## Configuration (`whisper-stt.conf`)
 
-| Variable               | Default                          | Description                        |
-|------------------------|----------------------------------|------------------------------------|
-| `WHISPER_MODEL_PATH`   | `models/ggml-large-v3-turbo.bin` | Path to model file                 |
-| `WHISPER_LANGUAGE`     | `auto`                           | Language or `auto` for detection   |
-| `WHISPER_TRANSLATE`    | `0`                              | Set `1` to translate to English    |
-| `WHISPER_AUTO_PASTE`   | `1`                              | Auto-paste after transcription     |
-| `WHISPER_AUDIO_DEVICE` | `default`                        | Follows macOS input selection      |
-| `WHISPER_MAX_SECONDS`  | `7200`                           | Max recording length in seconds    |
-| `WHISPER_HISTORY_MAX`  | `10`                             | Max entries kept in history        |
+| Variable               | Default                          | Description                      |
+| ---------------------- | -------------------------------- | -------------------------------- |
+| `WHISPER_MODEL_PATH`   | `models/ggml-large-v3-turbo.bin` | Path to model file               |
+| `WHISPER_LANGUAGE`     | `auto`                           | Language or `auto` for detection |
+| `WHISPER_TRANSLATE`    | `0`                              | Set `1` to translate to English  |
+| `WHISPER_AUTO_PASTE`   | `1`                              | Auto-paste after transcription   |
+| `WHISPER_AUDIO_DEVICE` | `default`                        | Follows macOS input selection    |
+| `WHISPER_MAX_SECONDS`  | `7200`                           | Max recording length in seconds  |
+| `WHISPER_HISTORY_MAX`  | `10`                             | Max entries kept in history      |
 
 ---
 
@@ -121,22 +125,23 @@ bash -n whisper.sh          # syntax check
 
 ## Runtime Files (not in repo)
 
-| Path                        | Purpose                              |
-|-----------------------------|--------------------------------------|
-| `/tmp/whisper_recording.wav`| Audio captured by ffmpeg             |
-| `/tmp/whisper_output.txt`   | Raw whisper-cli output               |
-| `/tmp/whisper_transcribing` | Marker while whisper-cli is running  |
-| `/tmp/ffmpeg.log`           | ffmpeg stderr                        |
-| `/tmp/whisper-error.log`    | whisper-cli stderr                   |
+| Path                         | Purpose                             |
+| ---------------------------- | ----------------------------------- |
+| `/tmp/whisper_recording.wav` | Audio captured by ffmpeg            |
+| `/tmp/whisper_output.txt`    | Raw whisper-cli output              |
+| `/tmp/whisper_transcribing`  | Marker while whisper-cli is running |
+| `/tmp/ffmpeg.log`            | ffmpeg stderr                       |
+| `/tmp/whisper-error.log`     | whisper-cli stderr                  |
 
 ---
 
 ## Pitfalls
 
-| Problem                              | Root Cause                          | Fix                                       |
-|--------------------------------------|-------------------------------------|-------------------------------------------|
-| Hotkey does nothing                  | Hammerspoon config not reloaded     | Menubar → Reload Config                   |
-| No audio output                      | Wrong device index                  | `whisper.sh list-devices` → adjust conf   |
-| `whisper-cli not found`              | PATH missing in Hammerspoon         | `find_bin()` checks Homebrew paths first  |
-| Spinner stays on                     | `/tmp/whisper_transcribing` not removed | Check error path in `stop_recording()` |
-| Model rejected for language          | `.en.bin` + non-English lang        | Switch model or set `WHISPER_LANGUAGE=en` |
+| Problem                             | Root Cause                              | Fix                                                               |
+| ----------------------------------- | --------------------------------------- | ----------------------------------------------------------------- |
+| Hotkey does nothing                 | Hammerspoon config not reloaded         | Menubar → Reload Config                                           |
+| No audio output                     | Wrong device index                      | `whisper.sh list-devices` → adjust conf                           |
+| `whisper-cli not found`             | PATH missing in Hammerspoon             | `find_bin()` checks Homebrew paths first                          |
+| Spinner stays on                    | `/tmp/whisper_transcribing` not removed | Auto-cleaned after 10 min; check error path in `stop_recording()` |
+| Hotkey ignored during transcription | Guard active while transcribing         | Expected — wait for transcription to finish                       |
+| Model rejected for language         | `.en.bin` + non-English lang            | Switch model or set `WHISPER_LANGUAGE=en`                         |

@@ -35,6 +35,15 @@ local status_item = hs.menubar.new()
 local spinner_frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 local spinner_index = 1
 local spinner_timer = nil
+local recording_start = nil
+
+local history_file = read_conf("WHISPER_HISTORY_FILE", home .. "/Scripts/Whisper/history.txt")
+
+local function format_duration(seconds)
+    local m = math.floor(seconds / 60)
+    local s = seconds % 60
+    return string.format("%d:%02d", m, s)
+end
 
 local function start_spinner()
     if spinner_timer then return end
@@ -59,13 +68,19 @@ local function set_indicator(state)
     if not status_item then return end
 
     if state == "transcribing" then
+        recording_start = nil
         start_spinner()
     else
         stop_spinner()
         if state == "recording" then
-            status_item:setTitle("●")
+            if not recording_start then
+                recording_start = os.time()
+            end
+            local elapsed = os.time() - recording_start
+            status_item:setTitle("● " .. format_duration(elapsed))
             status_item:setTooltip("Whisper: recording")
         else
+            recording_start = nil
             status_item:setTitle("○")
             status_item:setTooltip("Whisper: idle")
         end
@@ -91,12 +106,30 @@ local function update_indicator()
     if task then
         task:start()
     else
-        set_indicator(false)
+        set_indicator("idle")
     end
 end
 
+local whisper_busy = false
+local whisper_busy_safety = nil
+
 local function run_whisper(action)
+    if action == "toggle" and whisper_busy then
+        hs.alert.show("Whisper: transcription in progress…")
+        return
+    end
+
+    whisper_busy = true
+    -- Safety net: auto-reset after 10 min in case the callback never fires
+    if whisper_busy_safety then whisper_busy_safety:stop() end
+    whisper_busy_safety = hs.timer.doAfter(600, function()
+        whisper_busy = false
+        whisper_busy_safety = nil
+    end)
+
     local task = hs.task.new(whisper_script, function()
+        whisper_busy = false
+        if whisper_busy_safety then whisper_busy_safety:stop(); whisper_busy_safety = nil end
         hs.timer.doAfter(0.4, update_indicator)
         return false
     end, {action})
@@ -104,6 +137,8 @@ local function run_whisper(action)
     if task then
         task:start()
     else
+        whisper_busy = false
+        if whisper_busy_safety then whisper_busy_safety:stop(); whisper_busy_safety = nil end
         hs.notify.new({
             title = "Whisper",
             informativeText = "Failed to create task for " .. action
@@ -111,12 +146,139 @@ local function run_whisper(action)
     end
 end
 
+local script_dir = whisper_script:match("(.+)/[^/]+$") or "."
+local model_dir  = script_dir .. "/models"
+
+local function read_history()
+    local entries = {}
+    local f = io.open(history_file, "r")
+    if not f then return entries end
+    for line in f:lines() do
+        local ts, text = line:match("^%[(.-)%]%s+(.+)$")
+        if ts and text then
+            entries[#entries + 1] = { timestamp = ts, text = text }
+        end
+    end
+    f:close()
+    return entries
+end
+
+local function list_models()
+    local models = {}
+    local ok, result = pcall(function()
+        for name in hs.fs.dir(model_dir) do
+            if name:match("%.bin$") then
+                models[#models + 1] = name
+            end
+        end
+    end)
+    if not ok then return {} end
+    table.sort(models)
+    return models
+end
+
+local function get_active_model()
+    local path = read_conf("WHISPER_MODEL_PATH", "")
+    if path == "" then return "" end
+    return path:match("([^/]+)$") or path
+end
+
+local function set_active_model(model_name)
+    local new_path = model_dir .. "/" .. model_name
+    -- Update WHISPER_MODEL_PATH in the config file
+    local f = io.open(conf_file, "r")
+    if not f then
+        hs.alert.show("Cannot read config file")
+        return
+    end
+    local content = f:read("*a")
+    f:close()
+
+    local updated = content:gsub(
+        'WHISPER_MODEL_PATH="[^"]*"',
+        'WHISPER_MODEL_PATH="' .. new_path .. '"'
+    )
+    -- Fallback: unquoted form
+    if updated == content then
+        updated = content:gsub(
+            'WHISPER_MODEL_PATH=[^\n]+',
+            'WHISPER_MODEL_PATH="' .. new_path .. '"'
+        )
+    end
+
+    local fw = io.open(conf_file, "w")
+    if not fw then
+        hs.alert.show("Cannot write config file")
+        return
+    end
+    fw:write(updated)
+    fw:close()
+
+    -- Pretty name without ggml- prefix and .bin suffix for display
+    local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
+    hs.alert.show("Model → " .. display)
+end
+
+local function build_menu()
+    local menu = {
+        { title = "Toggle Recording", fn = function() run_whisper("toggle") end },
+        { title = "Stop Recording",   fn = function() run_whisper("stop") end },
+        { title = "Refresh Status",   fn = function() update_indicator() end },
+        { title = "-" },
+    }
+
+    -- Model selector
+    local models = list_models()
+    local active = get_active_model()
+    if #models > 0 then
+        menu[#menu + 1] = { title = "Model", disabled = true }
+        for _, m in ipairs(models) do
+            local is_active = (m == active)
+            local display = m:gsub("^ggml%-", ""):gsub("%.bin$", "")
+            local captured_model = m
+            menu[#menu + 1] = {
+                title = (is_active and "✓ " or "   ") .. display,
+                fn = function()
+                    if not is_active then
+                        set_active_model(captured_model)
+                    end
+                end,
+                disabled = is_active,
+                tooltip = m,
+            }
+        end
+        menu[#menu + 1] = { title = "-" }
+    end
+
+    -- History
+    local history = read_history()
+    if #history == 0 then
+        menu[#menu + 1] = { title = "No history yet", disabled = true }
+    else
+        menu[#menu + 1] = { title = "Recent Transcriptions", disabled = true }
+        for i = #history, 1, -1 do
+            local entry = history[i]
+            local preview = entry.text
+            if #preview > 60 then
+                preview = preview:sub(1, 60) .. "…"
+            end
+            local captured_text = entry.text
+            menu[#menu + 1] = {
+                title = preview,
+                fn = function()
+                    hs.pasteboard.setContents(captured_text)
+                    hs.alert.show("Copied to clipboard")
+                end,
+                tooltip = entry.timestamp,
+            }
+        end
+    end
+
+    return menu
+end
+
 if status_item then
-    status_item:setMenu({
-        { title = "Whisper Toggle", fn = function() run_whisper("toggle") end },
-        { title = "Whisper Stop",   fn = function() run_whisper("stop") end },
-        { title = "Refresh Status", fn = function() update_indicator() end }
-    })
+    status_item:setMenu(build_menu)
 end
 
 hs.hotkey.bind(toggle_mods, toggle_key, function() run_whisper("toggle") end)

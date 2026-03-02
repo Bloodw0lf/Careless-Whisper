@@ -204,6 +204,7 @@ echo "  2) Reload Hammerspoon config (menubar icon → Reload Config)."
 echo "  3) Press ${HOTKEY_TOGGLE} to start recording."
 echo "  4) Press ${HOTKEY_TOGGLE} again to stop + transcribe + paste."
 echo "  5) Emergency stop: ${HOTKEY_STOP}."
+echo "  6) Click the menubar icon (○) to switch models or browse history."
 echo
 echo "To change hotkeys: edit ${CONFIG_FILE} and reload Hammerspoon."
-echo "To change model:   edit WHISPER_MODEL_PATH in ${CONFIG_FILE}."
+echo "To change model:   use the menubar dropdown or edit WHISPER_MODEL_PATH in ${CONFIG_FILE}."

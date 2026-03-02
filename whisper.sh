@@ -4,7 +4,7 @@
 # Usage: whisper.sh start|stop|toggle|list-devices|status
 #
 
-set -u
+set -uo pipefail
 
 # Ensure UTF-8 text handling when launched from minimal environments (e.g. Hammerspoon).
 export LANG="${LANG:-de_DE.UTF-8}"
@@ -122,6 +122,19 @@ cleanup_stale_pid_file() {
     fi
 }
 
+cleanup_stale_transcribing_file() {
+    [ ! -f "${TRANSCRIBING_FILE}" ] && return 0
+
+    local file_mtime now file_age max_age=600
+    file_mtime="$(stat -f '%m' "${TRANSCRIBING_FILE}" 2>/dev/null || echo 0)"
+    now="$(date +%s)"
+    file_age=$(( now - file_mtime ))
+
+    if [ "${file_age}" -gt "${max_age}" ]; then
+        rm -f "${TRANSCRIBING_FILE}"
+    fi
+}
+
 recording_running() {
     cleanup_stale_pid_file
     if [ ! -f "${PID_FILE}" ]; then
@@ -190,7 +203,7 @@ start_recording() {
 
     if recording_running; then
         notify "Whisper" "Recording already in progress" "Basso"
-        exit 1
+        return 1
     fi
 
     rm -f "${AUDIO_FILE}" "${TEXT_FILE}" "${PID_FILE}"
@@ -242,6 +255,7 @@ stop_recording() {
     fi
 
     rm -f "${PID_FILE}"
+    touch "${TRANSCRIBING_FILE}"
 
     for _ in $(seq 1 15); do
         if [ -f "${AUDIO_FILE}" ] && [ -s "${AUDIO_FILE}" ]; then
@@ -251,6 +265,7 @@ stop_recording() {
     done
 
     if [ ! -f "${AUDIO_FILE}" ] || [ ! -s "${AUDIO_FILE}" ]; then
+        rm -f "${TRANSCRIBING_FILE}"
         notify "Whisper" "No audio recorded. Check microphone settings." "Basso"
         return 1
     fi
@@ -263,8 +278,6 @@ stop_recording() {
         cmd+=(-tr)
     fi
     cmd+=("${AUDIO_FILE}")
-
-    touch "${TRANSCRIBING_FILE}"
     if ! "${cmd[@]}" 2>"${ERROR_LOG_FILE}" | sed 's/^\[.*\] //' | tr -d '\n' > "${TEXT_FILE}"; then
         rm -f "${TRANSCRIBING_FILE}"
         local err
@@ -307,6 +320,13 @@ stop_recording() {
 }
 
 toggle_recording() {
+    cleanup_stale_transcribing_file
+
+    if [ -f "${TRANSCRIBING_FILE}" ]; then
+        notify "Whisper" "Transcription in progress — please wait" "Basso"
+        return 0
+    fi
+
     if recording_running; then
         stop_recording
     else
