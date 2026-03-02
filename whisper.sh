@@ -35,6 +35,10 @@ WHISPER_HISTORY_FILE="${WHISPER_HISTORY_FILE:-${SCRIPT_DIR}/history.txt}"
 TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-/tmp/whisper_transcribing}"
 WHISPER_HISTORY_MAX="${WHISPER_HISTORY_MAX:-10}"
 
+WHISPER_NOTIFICATIONS="${WHISPER_NOTIFICATIONS:-1}"
+WHISPER_SOUNDS="${WHISPER_SOUNDS:-1}"
+WHISPER_HOTKEY_TOGGLE="${WHISPER_HOTKEY_TOGGLE:-ctrl,cmd,w}"
+
 # Audio input:
 # - WHISPER_AUDIO_DEVICE=default follows macOS-selected input
 # - WHISPER_AUDIO_DEVICE=<n> uses AVFoundation index
@@ -62,10 +66,14 @@ FFMPEG_BIN="$(find_bin ffmpeg)"
 WHISPER_BIN="$(find_bin whisper-cli)"
 
 notify() {
+    [ "${WHISPER_NOTIFICATIONS}" = "0" ] && return 0
+
     local title="$1"
     local message="$2"
     local sound="${3:-}"
     local escaped
+
+    [ "${WHISPER_SOUNDS}" = "0" ] && sound=""
 
     escaped="$(printf '%s' "${message}" | sed 's/\\/\\\\/g; s/"/\\"/g')"
 
@@ -211,7 +219,10 @@ start_recording() {
     local audio_input
     audio_input="$(resolve_audio_input)"
 
-    notify "Whisper" "Recording... press Ctrl+Cmd+W again to stop" "Blow"
+    local hotkey_display
+    hotkey_display="$(printf '%s' "${WHISPER_HOTKEY_TOGGLE}" | sed 's/,/+/g' | tr '[:lower:]' '[:upper:]')"
+
+    notify "Whisper" "Recording... press ${hotkey_display} again to stop" "Blow"
 
     nohup "${FFMPEG_BIN}" \
         -f avfoundation \

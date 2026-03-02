@@ -32,12 +32,14 @@ local stop_mods,   stop_key   = parse_hotkey(read_conf("WHISPER_HOTKEY_STOP",   
 
 local status_item = hs.menubar.new()
 
+local script_dir  = whisper_script:match("(.+)/[^/]+$") or "."
+local model_dir   = script_dir .. "/models"
+local history_file = read_conf("WHISPER_HISTORY_FILE", script_dir .. "/history.txt")
+
 local spinner_frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 local spinner_index = 1
 local spinner_timer = nil
 local recording_start = nil
-
-local history_file = read_conf("WHISPER_HISTORY_FILE", home .. "/Scripts/Whisper/history.txt")
 
 local function format_duration(seconds)
     local m = math.floor(seconds / 60)
@@ -146,9 +148,6 @@ local function run_whisper(action)
     end
 end
 
-local script_dir = whisper_script:match("(.+)/[^/]+$") or "."
-local model_dir  = script_dir .. "/models"
-
 local function read_history()
     local entries = {}
     local f = io.open(history_file, "r")
@@ -183,36 +182,38 @@ local function get_active_model()
     return path:match("([^/]+)$") or path
 end
 
-local function set_active_model(model_name)
-    local new_path = model_dir .. "/" .. model_name
-    -- Update WHISPER_MODEL_PATH in the config file
+local function update_conf_value(key, value)
     local f = io.open(conf_file, "r")
-    if not f then
-        hs.alert.show("Cannot read config file")
-        return
-    end
+    if not f then return false end
     local content = f:read("*a")
     f:close()
 
-    local updated = content:gsub(
-        'WHISPER_MODEL_PATH="[^"]*"',
-        'WHISPER_MODEL_PATH="' .. new_path .. '"'
-    )
-    -- Fallback: unquoted form
+    local pattern = key .. '="[^"]*"'
+    local replacement = key .. '="' .. value .. '"'
+    local updated = content:gsub(pattern, replacement)
+    -- Fallback: unquoted
     if updated == content then
-        updated = content:gsub(
-            'WHISPER_MODEL_PATH=[^\n]+',
-            'WHISPER_MODEL_PATH="' .. new_path .. '"'
-        )
+        local pat2 = key .. '=[^\n]+'
+        updated = content:gsub(pat2, replacement)
+    end
+    -- Append if not present
+    if updated == content then
+        updated = content .. '\n' .. replacement .. '\n'
     end
 
     local fw = io.open(conf_file, "w")
-    if not fw then
-        hs.alert.show("Cannot write config file")
-        return
-    end
+    if not fw then return false end
     fw:write(updated)
     fw:close()
+    return true
+end
+
+local function set_active_model(model_name)
+    local new_path = model_dir .. "/" .. model_name
+    if not update_conf_value("WHISPER_MODEL_PATH", new_path) then
+        hs.alert.show("Cannot update config file")
+        return
+    end
 
     -- Pretty name without ggml- prefix and .bin suffix for display
     local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
@@ -226,6 +227,27 @@ local function build_menu()
         { title = "Refresh Status",   fn = function() update_indicator() end },
         { title = "-" },
     }
+
+    -- Notifications & Sounds toggles
+    local notif_on = read_conf("WHISPER_NOTIFICATIONS", "1") == "1"
+    local sound_on = read_conf("WHISPER_SOUNDS", "1") == "1"
+    menu[#menu + 1] = {
+        title = (notif_on and "✓ " or "   ") .. "Notifications",
+        fn = function()
+            local new_val = notif_on and "0" or "1"
+            update_conf_value("WHISPER_NOTIFICATIONS", new_val)
+            hs.alert.show("Notifications " .. (notif_on and "off" or "on"))
+        end,
+    }
+    menu[#menu + 1] = {
+        title = (sound_on and "✓ " or "   ") .. "Sounds",
+        fn = function()
+            local new_val = sound_on and "0" or "1"
+            update_conf_value("WHISPER_SOUNDS", new_val)
+            hs.alert.show("Sounds " .. (sound_on and "off" or "on"))
+        end,
+    }
+    menu[#menu + 1] = { title = "-" }
 
     -- Model selector
     local models = list_models()
