@@ -369,6 +369,67 @@ list_devices() {
     "${FFMPEG_BIN}" -f avfoundation -list_devices true -i "" 2>&1 | sed -n '/AVFoundation audio devices/,+24p'
 }
 
+list_available_models() {
+    local installed_models
+    installed_models="$(ls "${SCRIPT_DIR}/models/"*.bin 2>/dev/null | xargs -I{} basename {} || true)"
+
+    local all_models="ggml-large-v3-turbo.bin
+ggml-large-v3.bin
+ggml-medium.bin
+ggml-medium.en.bin
+ggml-small.bin
+ggml-small.en.bin
+ggml-base.bin
+ggml-base.en.bin
+ggml-tiny.bin
+ggml-tiny.en.bin"
+
+    while IFS= read -r model; do
+        if printf '%s\n' "${installed_models}" | grep -qx "${model}"; then
+            printf 'installed:%s\n' "${model}"
+        else
+            printf 'available:%s\n' "${model}"
+        fi
+    done <<< "${all_models}"
+}
+
+download_model() {
+    local model_name="${2:-}"
+    if [ -z "${model_name}" ]; then
+        printf 'Usage: %s download-model <model-name.bin>\n' "$0" >&2
+        exit 1
+    fi
+
+    # Validate model name
+    if ! printf '%s' "${model_name}" | grep -qE '^ggml-[a-z0-9.-]+\.bin$'; then
+        printf 'Invalid model name: %s\n' "${model_name}" >&2
+        exit 1
+    fi
+
+    local model_path="${SCRIPT_DIR}/models/${model_name}"
+    if [ -f "${model_path}" ]; then
+        printf 'already_exists\n'
+        exit 0
+    fi
+
+    mkdir -p "${SCRIPT_DIR}/models"
+    local url="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${model_name}"
+
+    notify "Whisper" "Downloading ${model_name}..." ""
+    printf 'downloading:%s\n' "${model_name}"
+
+    if curl -L --fail --progress-bar --output "${model_path}.part" "${url}" 2>&1; then
+        mv "${model_path}.part" "${model_path}"
+        printf 'done:%s\n' "${model_name}"
+        notify "Whisper" "Model ${model_name} downloaded" "Glass"
+    else
+        rm -f "${model_path}.part"
+        printf 'failed:%s\n' "${model_name}" >&2
+        notify "Whisper" "Download failed for ${model_name}" "Basso"
+        exit 1
+    fi
+}
+
 case "${ACTION}" in
     start)
         start_recording
@@ -382,11 +443,17 @@ case "${ACTION}" in
     list-devices)
         list_devices
         ;;
+    list-models)
+        list_available_models
+        ;;
+    download-model)
+        download_model "$@"
+        ;;
     status)
         status
         ;;
     *)
-        printf 'Usage: %s start|stop|toggle|list-devices|status\n' "$0" >&2
+        printf 'Usage: %s start|stop|toggle|list-devices|list-models|download-model|status\n' "$0" >&2
         exit 1
         ;;
 esac

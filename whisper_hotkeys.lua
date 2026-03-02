@@ -183,6 +183,56 @@ local function get_active_model()
     return path:match("([^/]+)$") or path
 end
 
+local download_in_progress = {}
+
+local function list_available_models()
+    local installed = {}
+    local available = {}
+    local handle = io.popen(whisper_script .. " list-models 2>/dev/null")
+    if not handle then return installed, available end
+    for line in handle:lines() do
+        local status, name = line:match("^(%w+):(.+)$")
+        if status == "installed" then
+            installed[#installed + 1] = name
+        elseif status == "available" then
+            available[#available + 1] = name
+        end
+    end
+    handle:close()
+    return installed, available
+end
+
+local function download_model(model_name)
+    if download_in_progress[model_name] then
+        hs.alert.show("Already downloading " .. model_name)
+        return
+    end
+
+    download_in_progress[model_name] = true
+    local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
+    hs.alert.show("Downloading " .. display .. "…")
+
+    local task = hs.task.new(whisper_script, function(exit_code, std_out, _)
+        download_in_progress[model_name] = nil
+        if exit_code == 0 then
+            if std_out and std_out:match("already_exists") then
+                hs.alert.show(display .. " already installed")
+            else
+                hs.alert.show(display .. " ready")
+            end
+        else
+            hs.alert.show("Download failed: " .. display)
+        end
+    end, {"download-model", model_name})
+
+    if task then
+        task:start()
+    else
+        download_in_progress[model_name] = nil
+        hs.alert.show("Failed to start download")
+    end
+end
+
 local function update_conf_value(key, value)
     local f = io.open(conf_file, "r")
     if not f then return false end
@@ -252,11 +302,11 @@ local function build_menu()
     menu[#menu + 1] = { title = "-" }
 
     -- Model selector
-    local models = list_models()
+    local installed, available = list_available_models()
     local active = get_active_model()
-    if #models > 0 then
+    if #installed > 0 or #available > 0 then
         menu[#menu + 1] = { title = "Model", disabled = true }
-        for _, m in ipairs(models) do
+        for _, m in ipairs(installed) do
             local is_active = (m == active)
             local display = m:gsub("^ggml%-", ""):gsub("%.bin$", "")
             local captured_model = m
@@ -270,6 +320,23 @@ local function build_menu()
                 disabled = is_active,
                 tooltip = m,
             }
+        end
+        if #available > 0 then
+            menu[#menu + 1] = { title = "-" }
+            menu[#menu + 1] = { title = "Download", disabled = true }
+            for _, m in ipairs(available) do
+                local display = m:gsub("^ggml%-", ""):gsub("%.bin$", "")
+                local captured_model = m
+                local is_downloading = download_in_progress[m] or false
+                menu[#menu + 1] = {
+                    title = (is_downloading and "⟳ " or "   ") .. display,
+                    fn = function()
+                        download_model(captured_model)
+                    end,
+                    disabled = is_downloading,
+                    tooltip = "Download " .. m .. " from Hugging Face",
+                }
+            end
         end
         menu[#menu + 1] = { title = "-" }
     end
