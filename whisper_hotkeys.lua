@@ -8,7 +8,7 @@ local conf_file      = home .. "/Scripts/Careless-Whisper/whisper-stt.conf"
 
 -- Read a value from whisper-stt.conf
 local function read_conf(key, default)
-    if not key:match("^%w+$") then return default end
+    if not key:match("^[%w_]+$") then return default end
     local handle = io.popen(
         "bash -c '. " .. conf_file .. " 2>/dev/null && printf \"%s\" \"${" .. key .. ":-}\"'"
     )

@@ -376,13 +376,9 @@ list_available_models() {
     local all_models="ggml-large-v3-turbo.bin
 ggml-large-v3.bin
 ggml-medium.bin
-ggml-medium.en.bin
 ggml-small.bin
-ggml-small.en.bin
 ggml-base.bin
-ggml-base.en.bin
-ggml-tiny.bin
-ggml-tiny.en.bin"
+ggml-tiny.bin"
 
     while IFS= read -r model; do
         if printf '%s\n' "${installed_models}" | grep -qx "${model}"; then
@@ -418,7 +414,7 @@ download_model() {
     notify "Whisper" "Downloading ${model_name}..." ""
     printf 'downloading:%s\n' "${model_name}"
 
-    if curl -L --fail --progress-bar --output "${model_path}.part" "${url}" 2>&1; then
+    if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}" 2>&1; then
         mv "${model_path}.part" "${model_path}"
         printf 'done:%s\n' "${model_name}"
         notify "Whisper" "Model ${model_name} downloaded" "Glass"
