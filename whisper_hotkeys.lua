@@ -184,6 +184,40 @@ local function get_active_model()
 end
 
 local download_in_progress = {}
+local download_progress_timer = nil
+
+local function stop_download_progress()
+    if download_progress_timer then
+        download_progress_timer:stop()
+        download_progress_timer = nil
+    end
+    -- Restore idle menubar
+    if status_item then
+        status_item:setTitle("○")
+        status_item:setTooltip("Whisper: idle")
+    end
+end
+
+local function start_download_progress(model_name, part_path)
+    stop_download_progress()
+    local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
+    download_progress_timer = hs.timer.doEvery(1.5, function()
+        local f = io.open(part_path, "r")
+        if f then
+            local size = f:seek("end")
+            f:close()
+            if size and status_item then
+                local mb = size / (1024 * 1024)
+                if mb >= 1024 then
+                    status_item:setTitle(string.format("⬇ %.1f GB", mb / 1024))
+                else
+                    status_item:setTitle(string.format("⬇ %.0f MB", mb))
+                end
+                status_item:setTooltip("Downloading " .. display .. "…")
+            end
+        end
+    end)
+end
 
 local function list_available_models()
     local installed = {}
@@ -212,13 +246,17 @@ local function download_model(model_name)
     local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
     hs.alert.show("Downloading " .. display .. "…")
 
+    local part_path = model_dir .. "/" .. model_name .. ".part"
+    start_download_progress(model_name, part_path)
+
     local task = hs.task.new(whisper_script, function(exit_code, std_out, _)
         download_in_progress[model_name] = nil
+        stop_download_progress()
         if exit_code == 0 then
             if std_out and std_out:match("already_exists") then
                 hs.alert.show(display .. " already installed")
             else
-                hs.alert.show(display .. " ready")
+                hs.alert.show(display .. " ready ✓")
             end
         else
             hs.alert.show("Download failed: " .. display)
@@ -229,6 +267,7 @@ local function download_model(model_name)
         task:start()
     else
         download_in_progress[model_name] = nil
+        stop_download_progress()
         hs.alert.show("Failed to start download")
     end
 end
