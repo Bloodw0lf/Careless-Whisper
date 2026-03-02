@@ -21,11 +21,10 @@ echo
 
 if [ -f "${HAMMERSPOON_INIT}" ]; then
     if grep -q "whisper_hotkeys.lua" "${HAMMERSPOON_INIT}"; then
-        # Remove the pcall+dofile block and the comment above it
+        # Remove the comment + pcall block that loads whisper_hotkeys.lua
         sed -i '' '/-- Whisper speech-to-text/,/^end)/d' "${HAMMERSPOON_INIT}" 2>/dev/null || true
+        # Remove any remaining standalone whisper references
         sed -i '' '/whisper_hotkeys\.lua/d' "${HAMMERSPOON_INIT}" 2>/dev/null || true
-        # Clean up any leftover pcall wrapper lines
-        sed -i '' '/^pcall(function()$/,/^end)$/{ /whisper/!d; }' "${HAMMERSPOON_INIT}" 2>/dev/null || true
         echo "==> Removed Whisper from ${HAMMERSPOON_INIT}"
     else
         echo "==> ${HAMMERSPOON_INIT} does not reference Whisper, skipping"
@@ -38,12 +37,15 @@ echo
 # ── Remove temp / runtime files ─────────────────────────────────────────────
 
 echo "==> Cleaning runtime files..."
-rm -f /tmp/whisper_recording.wav \
-      /tmp/whisper_recording.pid \
-      /tmp/whisper_output.txt \
-      /tmp/whisper_transcribing \
-      /tmp/ffmpeg.log \
-      /tmp/whisper-error.log
+for tmpdir in "${TMPDIR:-}" /tmp; do
+    [ -z "${tmpdir}" ] && continue
+    rm -f "${tmpdir}/whisper_recording.wav" \
+          "${tmpdir}/whisper_recording.pid" \
+          "${tmpdir}/whisper_output.txt" \
+          "${tmpdir}/whisper_transcribing" \
+          "${tmpdir}/ffmpeg.log" \
+          "${tmpdir}/whisper-error.log"
+done
 echo "    Done"
 echo
 

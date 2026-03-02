@@ -6,9 +6,11 @@
 
 set -uo pipefail
 
+WHISPER_VERSION="1.0.0"
+
 # Ensure UTF-8 text handling when launched from minimal environments (e.g. Hammerspoon).
-export LANG="${LANG:-de_DE.UTF-8}"
-export LC_CTYPE="${LC_CTYPE:-de_DE.UTF-8}"
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_CTYPE="${LC_CTYPE:-en_US.UTF-8}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/whisper-stt.conf"
@@ -20,11 +22,12 @@ fi
 
 ACTION="${1:-}"
 
-AUDIO_FILE="${WHISPER_AUDIO_FILE:-/tmp/whisper_recording.wav}"
-TEXT_FILE="${WHISPER_TEXT_FILE:-/tmp/whisper_output.txt}"
-PID_FILE="${WHISPER_PID_FILE:-/tmp/whisper_recording.pid}"
-LOG_FILE="${WHISPER_FFMPEG_LOG:-/tmp/ffmpeg.log}"
-ERROR_LOG_FILE="${WHISPER_ERROR_LOG:-/tmp/whisper-error.log}"
+WHISPER_TMPDIR="${TMPDIR:-/tmp}"
+AUDIO_FILE="${WHISPER_AUDIO_FILE:-${WHISPER_TMPDIR}/whisper_recording.wav}"
+TEXT_FILE="${WHISPER_TEXT_FILE:-${WHISPER_TMPDIR}/whisper_output.txt}"
+PID_FILE="${WHISPER_PID_FILE:-${WHISPER_TMPDIR}/whisper_recording.pid}"
+LOG_FILE="${WHISPER_FFMPEG_LOG:-${WHISPER_TMPDIR}/ffmpeg.log}"
+ERROR_LOG_FILE="${WHISPER_ERROR_LOG:-${WHISPER_TMPDIR}/whisper-error.log}"
 
 MODEL="${WHISPER_MODEL_PATH:-${SCRIPT_DIR}/models/ggml-medium.bin}"
 WHISPER_LANGUAGE="${WHISPER_LANGUAGE:-auto}"
@@ -32,7 +35,7 @@ WHISPER_TRANSLATE="${WHISPER_TRANSLATE:-0}"
 WHISPER_AUTO_PASTE="${WHISPER_AUTO_PASTE:-1}"
 MAX_SECONDS="${WHISPER_MAX_SECONDS:-7200}"
 WHISPER_HISTORY_FILE="${WHISPER_HISTORY_FILE:-${SCRIPT_DIR}/history.txt}"
-TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-/tmp/whisper_transcribing}"
+TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-${WHISPER_TMPDIR}/whisper_transcribing}"
 WHISPER_HISTORY_MAX="${WHISPER_HISTORY_MAX:-10}"
 
 WHISPER_NOTIFICATIONS="${WHISPER_NOTIFICATIONS:-1}"
@@ -42,9 +45,7 @@ WHISPER_HOTKEY_TOGGLE="${WHISPER_HOTKEY_TOGGLE:-ctrl,cmd,w}"
 # Audio input:
 # - WHISPER_AUDIO_DEVICE=default follows macOS-selected input
 # - WHISPER_AUDIO_DEVICE=<n> uses AVFoundation index
-# - WHISPER_AUDIO_DEVICE_INDEX=<n> compatibility fallback
-WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-default}"
-AUDIO_DEVICE_INDEX="${WHISPER_AUDIO_DEVICE_INDEX:-0}"
+WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-${WHISPER_AUDIO_DEVICE_INDEX:-default}}"
 
 find_bin() {
     local name="$1"
@@ -155,11 +156,7 @@ recording_running() {
 }
 
 resolve_audio_input() {
-    if [ -n "${WHISPER_AUDIO_DEVICE}" ]; then
-        printf '%s\n' "${WHISPER_AUDIO_DEVICE}"
-    else
-        printf '%s\n' "${AUDIO_DEVICE_INDEX}"
-    fi
+    printf '%s\n' "${WHISPER_AUDIO_DEVICE}"
 }
 
 language_allowed_for_model() {
@@ -168,12 +165,8 @@ language_allowed_for_model() {
 
     if [[ "${model_basename}" == *.en.bin ]]; then
         case "${WHISPER_LANGUAGE}" in
-            auto|de|german|fr|es|it|pt|ja|zh|ru|nl|pl|cs|tr|uk|hu|sv|ar|ko)
-                return 1
-                ;;
-            *)
-                return 0
-                ;;
+            en|english) return 0 ;;
+            *)          return 1 ;;
         esac
     fi
 
@@ -196,6 +189,12 @@ preflight_check() {
     if [ ! -f "${MODEL}" ]; then
         notify "Whisper" "Model missing at ${MODEL}" "Basso"
         printf 'Model missing: %s\n' "${MODEL}" >&2
+        exit 1
+    fi
+
+    if ! [[ "${MAX_SECONDS}" =~ ^[0-9]+$ ]]; then
+        notify "Whisper" "WHISPER_MAX_SECONDS must be a number" "Basso"
+        printf 'Invalid WHISPER_MAX_SECONDS: %s\n' "${MAX_SECONDS}" >&2
         exit 1
     fi
 
@@ -238,7 +237,7 @@ start_recording() {
     if ! recording_running; then
         local reason
         reason="$(tail -n 1 "${LOG_FILE}" 2>/dev/null || true)"
-        notify "Whisper" "Start failed. Check /tmp/ffmpeg.log" "Basso"
+        notify "Whisper" "Start failed. Check ${LOG_FILE}" "Basso"
         [ -n "${reason}" ] && printf 'ffmpeg start error: %s\n' "${reason}" >&2
         return 1
     fi
@@ -263,6 +262,8 @@ stop_recording() {
             fi
             sleep 0.1
         done
+        # Force-kill if still running to prevent orphan ffmpeg processes
+        kill -0 "${pid}" 2>/dev/null && kill -9 "${pid}" 2>/dev/null || true
     fi
 
     rm -f "${PID_FILE}"
@@ -289,11 +290,11 @@ stop_recording() {
         cmd+=(-tr)
     fi
     cmd+=("${AUDIO_FILE}")
-    if ! "${cmd[@]}" 2>"${ERROR_LOG_FILE}" | sed 's/^\[.*\] //' | tr -d '\n' > "${TEXT_FILE}"; then
+    if ! "${cmd[@]}" 2>"${ERROR_LOG_FILE}" | sed 's/^\[.*\] //' | tr '\n' ' ' | sed 's/  */ /g' > "${TEXT_FILE}"; then
         rm -f "${TRANSCRIBING_FILE}"
         local err
         err="$(tail -n 1 "${ERROR_LOG_FILE}" 2>/dev/null || true)"
-        notify "Whisper" "Transcription failed. Check /tmp/whisper-error.log" "Basso"
+        notify "Whisper" "Transcription failed. Check ${ERROR_LOG_FILE}" "Basso"
         [ -n "${err}" ] && printf 'whisper error: %s\n' "${err}" >&2
         return 1
     fi
@@ -356,6 +357,7 @@ status() {
 
     printf 'model: %s\n' "${MODEL}"
     printf 'language: %s\n' "${WHISPER_LANGUAGE}"
+    printf 'version: %s\n' "${WHISPER_VERSION}"
 }
 
 list_devices() {

@@ -8,6 +8,7 @@ local conf_file      = home .. "/Scripts/Whisper/whisper-stt.conf"
 
 -- Read a value from whisper-stt.conf
 local function read_conf(key, default)
+    if not key:match("^%w+$") then return default end
     local handle = io.popen(
         "bash -c '. " .. conf_file .. " 2>/dev/null && printf \"%s\" \"${" .. key .. ":-}\"'"
     )
@@ -185,25 +186,26 @@ end
 local function update_conf_value(key, value)
     local f = io.open(conf_file, "r")
     if not f then return false end
-    local content = f:read("*a")
+    local lines = {}
+    local replaced = false
+    local replacement = key .. '="' .. value .. '"'
+    for line in f:lines() do
+        if not replaced and line:match("^" .. key .. "=") then
+            lines[#lines + 1] = replacement
+            replaced = true
+        else
+            lines[#lines + 1] = line
+        end
+    end
     f:close()
 
-    local pattern = key .. '="[^"]*"'
-    local replacement = key .. '="' .. value .. '"'
-    local updated = content:gsub(pattern, replacement)
-    -- Fallback: unquoted
-    if updated == content then
-        local pat2 = key .. '=[^\n]+'
-        updated = content:gsub(pat2, replacement)
-    end
-    -- Append if not present
-    if updated == content then
-        updated = content .. '\n' .. replacement .. '\n'
+    if not replaced then
+        lines[#lines + 1] = replacement
     end
 
     local fw = io.open(conf_file, "w")
     if not fw then return false end
-    fw:write(updated)
+    fw:write(table.concat(lines, "\n") .. "\n")
     fw:close()
     return true
 end
@@ -306,7 +308,7 @@ end
 hs.hotkey.bind(toggle_mods, toggle_key, function() run_whisper("toggle") end)
 hs.hotkey.bind(stop_mods,   stop_key,   function() run_whisper("stop")   end)
 
-hs.timer.doEvery(1.0, update_indicator)
+hs.timer.doEvery(3.0, update_indicator)
 update_indicator()
 
 hs.alert.show("Whisper: " .. table.concat(toggle_mods, "+") .. "+" .. toggle_key .. " start/stop")

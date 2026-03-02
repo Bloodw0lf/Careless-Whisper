@@ -12,6 +12,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RELATIVE_PATH="${ROOT_DIR#${HOME}/}"
 
+if [[ "${RELATIVE_PATH}" == /* ]]; then
+    echo "ERROR: Repo must be inside \$HOME (${HOME})."
+    echo "       Current location: ${ROOT_DIR}"
+    exit 1
+fi
+
 HAMMERSPOON_DIR="${HOME}/.hammerspoon"
 HAMMERSPOON_INIT="${HAMMERSPOON_DIR}/init.lua"
 MODEL_DIR="${ROOT_DIR}/models"
@@ -169,6 +175,8 @@ WHISPER_AUTO_PASTE=1
 WHISPER_MAX_SECONDS=7200
 WHISPER_HOTKEY_TOGGLE="${HOTKEY_TOGGLE}"
 WHISPER_HOTKEY_STOP="${HOTKEY_STOP}"
+WHISPER_NOTIFICATIONS=1
+WHISPER_SOUNDS=1
 # Optional fixed device index: WHISPER_AUDIO_DEVICE_INDEX=1
 # Optional translate to English: WHISPER_TRANSLATE=1
 # Optional history size: WHISPER_HISTORY_MAX=10
@@ -246,5 +254,10 @@ if [ -d "/Applications/Hammerspoon.app" ] || [ -d "${HOME}/Applications/Hammersp
     echo
     echo "==> Opening Hammerspoon..."
     open -a Hammerspoon
+    # Attempt to reload config if Hammerspoon was already running
+    sleep 1
+    if command -v hs >/dev/null 2>&1; then
+        hs -c 'hs.reload()' 2>/dev/null && echo "    Reloaded Hammerspoon config." || true
+    fi
     echo "    If this is a fresh install, grant Accessibility permission when prompted."
 fi
