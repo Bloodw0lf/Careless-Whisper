@@ -3,8 +3,8 @@
 
 local home = os.getenv("HOME")
 -- Paths are set automatically by install.sh
-local whisper_script = home .. "/Scripts/Careless-Whisper/whisper.sh"
-local conf_file      = home .. "/Scripts/Careless-Whisper/whisper-stt.conf"
+local whisper_script = home .. "/Careless-Whisper/whisper.sh"
+local conf_file      = home .. "/Careless-Whisper/whisper-stt.conf"
 
 -- Read a value from whisper-stt.conf
 local function read_conf(key, default)
@@ -18,7 +18,7 @@ local function read_conf(key, default)
     return (val and val ~= "") and val or default
 end
 
--- Parse "ctrl,cmd,w" → mods {"ctrl","cmd"}, key "w"
+-- Parse "shift,cmd,r" → mods {"shift","cmd"}, key "r"
 local function parse_hotkey(str)
     local parts = {}
     for p in str:gmatch("[^,]+") do
@@ -28,8 +28,8 @@ local function parse_hotkey(str)
     return parts, key
 end
 
-local toggle_mods, toggle_key = parse_hotkey(read_conf("WHISPER_HOTKEY_TOGGLE", "ctrl,cmd,w"))
-local stop_mods,   stop_key   = parse_hotkey(read_conf("WHISPER_HOTKEY_STOP",   "ctrl,cmd,q"))
+local toggle_mods, toggle_key = parse_hotkey(read_conf("WHISPER_HOTKEY_TOGGLE", "shift,cmd,r"))
+local stop_mods,   stop_key   = parse_hotkey(read_conf("WHISPER_HOTKEY_STOP",   "shift,cmd,q"))
 
 local status_item = hs.menubar.new()
 

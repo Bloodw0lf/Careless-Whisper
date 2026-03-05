@@ -21,14 +21,14 @@ The installer handles everything automatically:
 5. Wires up `~/.hammerspoon/init.lua`
 6. Launches Hammerspoon and reloads the config
 
-After install: press **Ctrl+Cmd+W** to start recording, press again to transcribe and paste.
+After install: press **⇧⌘R** to start recording, press again to transcribe and paste.
 
 ## Hotkeys
 
-| Shortcut     | Action                                     |
-| ------------ | ------------------------------------------ |
-| `Ctrl+Cmd+W` | Toggle recording (start / stop+transcribe) |
-| `Ctrl+Cmd+Q` | Emergency stop                             |
+| Shortcut | Action                                     |
+| -------- | ------------------------------------------ |
+| `⇧⌘R`    | Toggle recording (start / stop+transcribe) |
+| `⇧⌘Q`    | Emergency stop                             |
 
 Both are configurable in `whisper-stt.conf` and applied on Hammerspoon reload.
 
@@ -88,8 +88,8 @@ All settings live in `whisper-stt.conf` (created by the installer, gitignored):
 | `WHISPER_HISTORY_MAX`   | `10`                             | Entries kept in history                    |
 | `WHISPER_NOTIFICATIONS` | `1`                              | `0` = disable notifications                |
 | `WHISPER_SOUNDS`        | `1`                              | `0` = disable sounds                       |
-| `WHISPER_HOTKEY_TOGGLE` | `ctrl,cmd,w`                     | Toggle hotkey                              |
-| `WHISPER_HOTKEY_STOP`   | `ctrl,cmd,q`                     | Emergency stop hotkey                      |
+| `WHISPER_HOTKEY_TOGGLE` | `shift,cmd,r`                    | Toggle hotkey                              |
+| `WHISPER_HOTKEY_STOP`   | `shift,cmd,q`                    | Emergency stop hotkey                      |
 
 ## Uninstall
 

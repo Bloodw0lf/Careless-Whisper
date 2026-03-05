@@ -151,7 +151,7 @@ echo
 # ── Hotkey configuration ──────────────────────────────────────────────────────
 
 echo "==> Hotkey configuration"
-echo "    Format: modifier,modifier,key  (e.g. ctrl,cmd,w)"
+echo "    Format: modifier,modifier,key  (e.g. shift,cmd,r)"
 echo "    Available modifiers: ctrl  cmd  alt  shift"
 echo
 read -rp "    Toggle (start/stop) [ctrl,cmd,w]: " HOTKEY_TOGGLE
