@@ -154,10 +154,10 @@ echo "==> Hotkey configuration"
 echo "    Format: modifier,modifier,key  (e.g. shift,cmd,r)"
 echo "    Available modifiers: ctrl  cmd  alt  shift"
 echo
-read -rp "    Toggle (start/stop) [ctrl,cmd,w]: " HOTKEY_TOGGLE
-read -rp "    Stop immediately    [ctrl,cmd,q]: " HOTKEY_STOP
-HOTKEY_TOGGLE="${HOTKEY_TOGGLE:-ctrl,cmd,w}"
-HOTKEY_STOP="${HOTKEY_STOP:-ctrl,cmd,q}"
+read -rp "    Toggle (start/stop) [shift,cmd,r]: " HOTKEY_TOGGLE
+read -rp "    Stop immediately    [shift,cmd,q]: " HOTKEY_STOP
+HOTKEY_TOGGLE="${HOTKEY_TOGGLE:-shift,cmd,r}"
+HOTKEY_STOP="${HOTKEY_STOP:-shift,cmd,q}"
 echo
 
 # ── Config file ──────────────────────────────────────────────────────────────
