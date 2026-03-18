@@ -76,12 +76,87 @@ WHISPER_BIN="$(find_bin whisper-cli)"
 # ── Copilot API for post-processing ──────────────────────────────────────────
 
 COPILOT_API_URL="https://api.githubcopilot.com/chat/completions"
+COPILOT_CLIENT_ID="Iv1.b507a08c87ecfe98"
+WHISPER_AUTH_DIR="${HOME}/.config/careless-whisper"
+WHISPER_AUTH_FILE="${WHISPER_AUTH_DIR}/auth.json"
 COPILOT_API_HEADERS=(
     -H "Content-Type: application/json"
     -H "Editor-Version: vscode/1.96.0"
     -H "Editor-Plugin-Version: copilot-chat/0.23.0"
     -H "Copilot-Integration-Id: vscode-chat"
 )
+
+copilot_device_flow() {
+    local device_response
+    device_response="$(curl -s -X POST "https://github.com/login/device/code" \
+        -H "Accept: application/json" \
+        -d "client_id=${COPILOT_CLIENT_ID}&scope=copilot" 2>/dev/null)"
+
+    if [ -z "${device_response}" ]; then
+        printf 'ERROR: Could not reach github.com\n' >&2
+        return 1
+    fi
+
+    local device_code user_code verification_uri interval
+    device_code="$(python3 -c "import json,sys; print(json.load(sys.stdin)['device_code'])" <<< "${device_response}" 2>/dev/null)"
+    user_code="$(python3 -c "import json,sys; print(json.load(sys.stdin)['user_code'])" <<< "${device_response}" 2>/dev/null)"
+    verification_uri="$(python3 -c "import json,sys; print(json.load(sys.stdin)['verification_uri'])" <<< "${device_response}" 2>/dev/null)"
+    interval="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('interval', 5))" <<< "${device_response}" 2>/dev/null)"
+
+    if [ -z "${device_code}" ] || [ -z "${user_code}" ]; then
+        printf 'ERROR: Unexpected response from GitHub\n' >&2
+        return 1
+    fi
+
+    # Output code for the caller (Lua reads this)
+    printf 'USER_CODE=%s\n' "${user_code}"
+    printf 'VERIFICATION_URI=%s\n' "${verification_uri}"
+
+    # Copy to clipboard
+    printf '%s' "${user_code}" | pbcopy 2>/dev/null
+
+    # Poll for token
+    local max_attempts=60
+    local attempt=0
+    while [ "${attempt}" -lt "${max_attempts}" ]; do
+        sleep "${interval}"
+        attempt=$((attempt + 1))
+
+        local token_response
+        token_response="$(curl -s -X POST "https://github.com/login/oauth/access_token" \
+            -H "Accept: application/json" \
+            -d "client_id=${COPILOT_CLIENT_ID}&device_code=${device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code" 2>/dev/null)"
+
+        local error access_token
+        error="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('error', ''))" <<< "${token_response}" 2>/dev/null)"
+
+        if [ "${error}" = "authorization_pending" ]; then
+            continue
+        elif [ "${error}" = "slow_down" ]; then
+            interval=$((interval + 5))
+            continue
+        elif [ -z "${error}" ]; then
+            access_token="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token', ''))" <<< "${token_response}" 2>/dev/null)"
+            if [ -n "${access_token}" ] && [ "${#access_token}" -gt 10 ]; then
+                mkdir -p "${WHISPER_AUTH_DIR}"
+                python3 -c "
+import json, sys
+with open(sys.argv[1], 'w') as f:
+    json.dump({'access_token': sys.argv[2]}, f)
+" "${WHISPER_AUTH_FILE}" "${access_token}"
+                chmod 600 "${WHISPER_AUTH_FILE}"
+                printf 'AUTH_OK\n'
+                return 0
+            fi
+        else
+            printf 'ERROR: %s\n' "${error}" >&2
+            return 1
+        fi
+    done
+
+    printf 'ERROR: Timed out\n' >&2
+    return 1
+}
 
 resolve_copilot_token() {
     if [ -n "${GITHUB_COPILOT_TOKEN:-}" ]; then
@@ -803,8 +878,11 @@ case "${ACTION}" in
     status)
         status
         ;;
+    auth)
+        copilot_device_flow
+        ;;
     *)
-        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|status\n' "$0" >&2
+        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|auth|status\n' "$0" >&2
         exit 1
         ;;
 esac

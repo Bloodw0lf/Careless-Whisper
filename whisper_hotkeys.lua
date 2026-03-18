@@ -39,6 +39,17 @@ end
 
 local script_dir  = whisper_script:match("(.+)/[^/]+$") or "."
 local model_dir   = script_dir .. "/models"
+local auth_file   = home .. "/.config/careless-whisper/auth.json"
+
+-- Check if Copilot auth token exists
+local function has_copilot_token()
+    local f = io.open(auth_file, "r")
+    if not f then return false end
+    local content = f:read("*a")
+    f:close()
+    local token = content:match('"access_token"%s*:%s*"([^"]+)"')
+    return token and #token > 10
+end
 local history_file = read_conf("WHISPER_HISTORY_FILE", script_dir .. "/history.txt")
 
 local spinner_frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -378,37 +389,63 @@ local function build_menu()
     }
     menu[#menu + 1] = { title = "-" }
 
-    -- Post-processing mode selector
-    local pp_mode = read_conf("WHISPER_POST_PROCESS", "off")
-    local pp_modes = {
-        { id = "off",        label = "Off (raw transcript)" },
-        { id = "clean",      label = "Clean (remove fillers)" },
-        { id = "message",    label = "Messenger (WebEx/Teams)" },
-        { id = "email",      label = "Email (formal)" },
-        { id = "prompt",     label = "Prompt (light cleanup)" },
-        { id = "prompt-pro", label = "Prompt Pro (best practice)" },
-    }
-    local pp_submenu = {}
-    for _, m in ipairs(pp_modes) do
-        local is_active = (m.id == pp_mode)
-        local captured_id = m.id
-        local captured_label = m.label
-        pp_submenu[#pp_submenu + 1] = {
-            title = (is_active and "✓ " or "   ") .. m.label,
+    -- Post-processing: only show mode selector if authenticated
+    local has_token = has_copilot_token()
+    if has_token then
+        local pp_mode = read_conf("WHISPER_POST_PROCESS", "off")
+        local pp_modes = {
+            { id = "off",        label = "Off (raw transcript)" },
+            { id = "clean",      label = "Clean (remove fillers)" },
+            { id = "message",    label = "Messenger (WebEx/Teams)" },
+            { id = "email",      label = "Email (formal)" },
+            { id = "prompt",     label = "Prompt (light cleanup)" },
+            { id = "prompt-pro", label = "Prompt Pro (best practice)" },
+        }
+        local pp_submenu = {}
+        for _, m in ipairs(pp_modes) do
+            local is_active = (m.id == pp_mode)
+            local captured_id = m.id
+            local captured_label = m.label
+            pp_submenu[#pp_submenu + 1] = {
+                title = (is_active and "✓ " or "   ") .. m.label,
+                fn = function()
+                    if not is_active then
+                        update_conf_value("WHISPER_POST_PROCESS", captured_id)
+                        alert("Post-process → " .. captured_label)
+                    end
+                end,
+                disabled = is_active,
+            }
+        end
+        local pp_display = pp_mode == "off" and "Off" or pp_mode:sub(1,1):upper() .. pp_mode:sub(2)
+        menu[#menu + 1] = {
+            title = "Post-process: " .. pp_display,
+            menu = pp_submenu,
+        }
+    else
+        menu[#menu + 1] = {
+            title = "Sign in to GitHub Copilot…",
             fn = function()
-                if not is_active then
-                    update_conf_value("WHISPER_POST_PROCESS", captured_id)
-                    alert("Post-process → " .. captured_label)
-                end
+                alert("Authenticating with GitHub…\nCode copied to clipboard.\nOpening browser…")
+
+                local task = hs.task.new(whisper_script, function(exitCode, stdout, stderr)
+                    if exitCode == 0 and stdout and stdout:match("AUTH_OK") then
+                        alert("✓ Copilot authenticated!")
+                        update_conf_value("WHISPER_POST_PROCESS", "clean")
+                    else
+                        local err = (stderr or ""):match("ERROR: (.+)")
+                        alert(err or "Authentication failed")
+                    end
+                end, { "auth" })
+                task:start()
+
+                -- Give the task a moment to request the code and copy to clipboard, then open browser
+                hs.timer.doAfter(2, function()
+                    hs.urlevent.openURL("https://github.com/login/device")
+                end)
             end,
-            disabled = is_active,
         }
     end
-    local pp_display = pp_mode == "off" and "Off" or pp_mode:sub(1,1):upper() .. pp_mode:sub(2)
-    menu[#menu + 1] = {
-        title = "Post-process: " .. pp_display,
-        menu = pp_submenu,
-    }
     menu[#menu + 1] = { title = "-" }
 
     -- Model selector (submenu)
