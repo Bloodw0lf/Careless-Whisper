@@ -53,6 +53,7 @@ WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-${WHISPER_AUDIO_DEVICE_INDEX:-defa
 
 # Post-processing mode: off | clean | message | email | prompt | prompt-pro
 WHISPER_POST_PROCESS="${WHISPER_POST_PROCESS:-off}"
+WHISPER_COPILOT_MODEL="${WHISPER_COPILOT_MODEL:-claude-sonnet-4.5}"
 
 find_bin() {
     local name="$1"
@@ -345,7 +346,7 @@ post_process_text() {
     payload="$(python3 -c "
 import json, sys
 print(json.dumps({
-    'model': 'claude-sonnet-4.6',
+    'model': sys.argv[3],
     'messages': [
         {'role': 'system', 'content': sys.argv[1]},
         {'role': 'user', 'content': sys.argv[2]}
@@ -353,7 +354,7 @@ print(json.dumps({
     'max_tokens': 4096,
     'temperature': 0.2
 }))
-" "${system_prompt}" "${raw_text}" 2>/dev/null)"
+" "${system_prompt}" "${raw_text}" "${WHISPER_COPILOT_MODEL}" 2>/dev/null)"
 
     if [ -z "${payload}" ]; then
         notify "Whisper" "Post-processing failed — payload error" "Basso"
