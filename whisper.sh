@@ -36,6 +36,7 @@ WHISPER_AUTO_PASTE="${WHISPER_AUTO_PASTE:-1}"
 MAX_SECONDS="${WHISPER_MAX_SECONDS:-7200}"
 WHISPER_HISTORY_FILE="${WHISPER_HISTORY_FILE:-${SCRIPT_DIR}/history.txt}"
 TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-${WHISPER_TMPDIR}/whisper_transcribing}"
+POSTPROCESSING_FILE="${WHISPER_TMPDIR}/whisper_postprocessing"
 WHISPER_HISTORY_MAX="${WHISPER_HISTORY_MAX:-10}"
 
 SEGMENTS_DIR="${WHISPER_TMPDIR}/whisper_segments"
@@ -49,6 +50,9 @@ WHISPER_HOTKEY_TOGGLE="${WHISPER_HOTKEY_TOGGLE:-shift,cmd,r}"
 # - WHISPER_AUDIO_DEVICE=default follows macOS-selected input
 # - WHISPER_AUDIO_DEVICE=<n> uses AVFoundation index
 WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-${WHISPER_AUDIO_DEVICE_INDEX:-default}}"
+
+# Post-processing mode: off | clean | message | email | prompt | prompt-pro
+WHISPER_POST_PROCESS="${WHISPER_POST_PROCESS:-off}"
 
 find_bin() {
     local name="$1"
@@ -68,6 +72,280 @@ find_bin() {
 
 FFMPEG_BIN="$(find_bin ffmpeg)"
 WHISPER_BIN="$(find_bin whisper-cli)"
+
+# ── Copilot API for post-processing ──────────────────────────────────────────
+
+COPILOT_API_URL="https://api.githubcopilot.com/chat/completions"
+COPILOT_API_HEADERS=(
+    -H "Content-Type: application/json"
+    -H "Editor-Version: vscode/1.96.0"
+    -H "Editor-Plugin-Version: copilot-chat/0.23.0"
+    -H "Copilot-Integration-Id: vscode-chat"
+)
+
+resolve_copilot_token() {
+    if [ -n "${GITHUB_COPILOT_TOKEN:-}" ]; then
+        printf '%s' "${GITHUB_COPILOT_TOKEN}"
+        return 0
+    fi
+
+    # Check careless-whisper own auth file (from install.sh device flow)
+    local own_auth="${HOME}/.config/careless-whisper/auth.json"
+    if [ -f "${own_auth}" ]; then
+        local token
+        token="$(python3 -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+print(data.get('access_token', ''))
+" "${own_auth}" 2>/dev/null || true)"
+        if [ -n "${token}" ] && [ "${#token}" -gt 10 ]; then
+            printf '%s' "${token}"
+            return 0
+        fi
+    fi
+
+    local home="${HOME}"
+    local auth_paths=(
+        "${home}/Library/Application Support/opencode/auth.json"
+        "${home}/.local/share/opencode/auth.json"
+    )
+
+    for auth_path in "${auth_paths[@]}"; do
+        if [ -f "${auth_path}" ]; then
+            local token
+            # Try nested object format: {"github-copilot": {"access": "gho_..."}}
+            token="$(python3 -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+entry = data.get('github-copilot', {})
+if isinstance(entry, dict):
+    print(entry.get('access', ''))
+elif isinstance(entry, str):
+    print(entry)
+" "${auth_path}" 2>/dev/null || true)"
+            if [ -n "${token}" ] && [ "${#token}" -gt 10 ]; then
+                printf '%s' "${token}"
+                return 0
+            fi
+        fi
+    done
+
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        printf '%s' "${GITHUB_TOKEN}"
+        return 0
+    fi
+
+    return 1
+}
+
+post_process_prompt() {
+    local mode="$1"
+    case "${mode}" in
+        clean)
+            cat <<'PROMPT'
+You are a transcript cleaner. Your job is to take raw speech-to-text output and clean it up.
+
+Rules:
+- Remove filler words (um, uh, äh, also, halt, quasi, sozusagen, basically, like, you know, irgendwie, eigentlich, eben, ja, naja, ne)
+- Remove conversation markers that carry no content (e.g. "Okay", "Alles klar", "Genau", "So", "Ja", "Right", "Sure") — especially at sentence beginnings and endings
+- Remove stutters and word-level repetitions ("ich habe ich habe" → "ich habe")
+- Fix broken sentence structure from natural speech jumps
+- Fix punctuation where whisper got it wrong (missing periods, misplaced commas)
+- Remove incomplete sentence fragments at the very beginning or end of the transcript (caused by recording start/stop cutting mid-sentence)
+- Keep the original meaning, tone, and style — do NOT rewrite or formalize
+- Keep the original language (German stays German, English stays English)
+
+Whisper hallucinations:
+- whisper.cpp sometimes hallucinates phantom text from silence or noise. Remove obvious hallucinations like "Vielen Dank für's Zuschauen", "Untertitel von...", "Thank you for watching", "Bis zum nächsten Mal", or any text that clearly does not match spoken content
+- Also remove repetitive looping phrases that whisper generates when audio is unclear
+
+Spelling hints in speech:
+- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
+- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
+- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
+- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+
+- Preserve technical terms, names, and numbers using corrected spellings
+- Output ONLY the cleaned text, nothing else — no explanations, no quotes
+PROMPT
+            ;;
+        message)
+            cat <<'PROMPT'
+You are a business message optimizer. Take raw speech-to-text output and turn it into a clean, concise message suitable for Slack, Teams, or WebEx chat.
+
+Rules:
+- Make it clear, concise, and well-structured
+- Use short paragraphs or bullet points where appropriate
+- Do NOT insert empty lines (paragraph breaks) between sections. On messaging platforms, people write in compact blocks. Use a single line break at most to separate a closing question or call-to-action, but never double newlines.
+- Keep the original language (German stays German, English stays English)
+- Keep a professional but approachable tone
+- NEVER use AI-typical punctuation or phrasing: no semicolons (;), no em dashes (—), no en dashes (–), no colons for emphasis. Use commas, periods. Use normal dashes (-) only when it's connecting two words together. Write like a normal person typing, not like a language model.
+
+Spelling hints in speech:
+- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
+- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
+- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
+- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+
+- Preserve technical terms, names, and numbers using corrected spellings
+- Output ONLY the message text, nothing else — no explanations, no quotes
+PROMPT
+            ;;
+        email)
+            cat <<'PROMPT'
+You are a professional email writer. Take raw speech-to-text output and rewrite it as a polished professional email body.
+
+Rules:
+- Extract the INTENT and KEY INFORMATION from the rambling speech — do not just clean up the wording
+- Rewrite into clear, professional prose — this should read like a well-written email, not like someone talking
+- Write like a real person: warm, direct, and natural. Avoid stiff or formulaic phrasing that sounds AI-generated. Vary sentence length. Use the kind of language a competent professional would actually write.
+- Add an appropriate greeting (e.g. "Hallo Frank,") based on names mentioned
+- Do NOT add a sign-off, closing, or signature (no "Viele Grüße", "Best regards", etc.) — the user's email client appends a signature automatically
+- Structure with short, clear paragraphs
+- Keep the original language (German stays German, English stays English)
+- Use a professional, polite, but not overly formal tone
+- NEVER use AI-typical punctuation or phrasing: no semicolons (;), no em dashes (—), no en dashes (–), no colons for emphasis. Use commas, periods. Use normal dashes (-) only when it's connecting two words together. Write like a normal person typing, not like a language model.
+
+Spelling hints in speech:
+- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
+- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
+- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
+- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+- The relevant word is typically within 5-10 words before the spelling
+
+- Preserve technical terms, product names, and numbers using the corrected spellings
+- Do NOT invent a subject line — only the email body
+- Output ONLY the email text, nothing else — no explanations, no quotes
+PROMPT
+            ;;
+        prompt)
+            cat <<'PROMPT'
+You are a prompt reformulator. The user dictated a prompt for an AI assistant using speech-to-text. Your job is to clean up and restructure the spoken input so it works well as a prompt, while keeping the original intent fully intact.
+
+Rules:
+- Keep the user's intent, meaning, and level of detail exactly as spoken
+- Restructure rambling speech into clear, direct instructions
+- Fix grammar, remove filler words, and clean up speech artifacts
+- Use clear, natural language — do NOT add prompt engineering patterns (no "You are a...", no "Act as...", no role definitions, no constraints the user didn't mention)
+- If the user mentioned specific requirements, keep them all — do not drop or summarize away details
+- Keep the original language (German stays German, English stays English)
+- Do NOT add anything the user didn't say — no extra context, no assumptions, no embellishments
+- You MAY use any formatting that helps AI models parse the prompt effectively (markdown headers, em dashes, bullet points, etc.) — the output is for AI consumption, not human reading
+
+Spelling hints in speech:
+- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
+- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
+- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
+- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+
+- Output ONLY the cleaned prompt, nothing else — no explanations, no quotes, no meta-commentary
+PROMPT
+            ;;
+        prompt-pro)
+            cat <<'PROMPT'
+You are an expert prompt engineer. The user dictated a rough idea or request using speech-to-text. Your job is to transform it into a well-structured, effective prompt following prompt engineering best practices.
+
+Rules:
+- Extract the core INTENT and REQUIREMENTS from the spoken input
+- Rewrite into a professional, well-structured prompt that will get the best results from an LLM
+- Apply prompt engineering best practices:
+  - Add an appropriate role/persona ("You are a senior [relevant role] with deep expertise in [domain]...")
+  - Define clear objectives and expected output format
+  - Add relevant constraints (conciseness, tone, scope) that fit the request
+  - Structure with clear sections if the task is complex
+- Do NOT invent requirements the user didn't mention — enhance the structure and framing, not the scope
+- Keep the original language (German stays German, English stays English)
+- Use any formatting that helps AI models parse the prompt effectively (markdown headers, em dashes, bullet points, etc.) — the output is for AI consumption
+- Match the complexity of the enhanced prompt to the complexity of the request — a simple question gets a concise enhanced prompt, not a 500-word framework
+
+Spelling hints in speech:
+- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
+- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
+- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
+- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+
+- Output ONLY the enhanced prompt, nothing else — no explanations, no quotes, no meta-commentary
+PROMPT
+            ;;
+    esac
+}
+
+post_process_text() {
+    local mode="${WHISPER_POST_PROCESS}"
+
+    if [ "${mode}" = "off" ] || [ -z "${mode}" ]; then
+        return 0
+    fi
+
+    local raw_text
+    raw_text="$(cat "${TEXT_FILE}" 2>/dev/null || true)"
+    if [ -z "${raw_text}" ]; then
+        return 0
+    fi
+
+    local token
+    if ! token="$(resolve_copilot_token)"; then
+        notify "Whisper" "Post-processing skipped — no Copilot token" ""
+        return 0
+    fi
+
+    local system_prompt
+    system_prompt="$(post_process_prompt "${mode}")"
+
+    # Build JSON payload — use python3 for safe escaping
+    local payload
+    payload="$(python3 -c "
+import json, sys
+print(json.dumps({
+    'model': 'claude-sonnet-4.6',
+    'messages': [
+        {'role': 'system', 'content': sys.argv[1]},
+        {'role': 'user', 'content': sys.argv[2]}
+    ],
+    'max_tokens': 4096,
+    'temperature': 0.2
+}))
+" "${system_prompt}" "${raw_text}" 2>/dev/null)"
+
+    if [ -z "${payload}" ]; then
+        notify "Whisper" "Post-processing failed — payload error" "Basso"
+        return 1
+    fi
+
+    local response
+    response="$(curl -s --max-time 120 \
+        -H "Authorization: Bearer ${token}" \
+        "${COPILOT_API_HEADERS[@]}" \
+        -d "${payload}" \
+        "${COPILOT_API_URL}" 2>/dev/null)"
+
+    if [ -z "${response}" ]; then
+        notify "Whisper" "Post-processing failed — no API response" "Basso"
+        return 1
+    fi
+
+    local processed
+    processed="$(python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+choices = data.get('choices', [])
+if choices:
+    print(choices[0].get('message', {}).get('content', ''))
+" <<< "${response}" 2>/dev/null)"
+
+    if [ -n "${processed}" ]; then
+        # DEBUG: log raw vs refined for prompt tuning
+        {
+            printf '=== %s [%s] ===\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${mode}"
+            printf '--- RAW ---\n%s\n\n--- REFINED ---\n%s\n\n' "${raw_text}" "${processed}"
+        } >> "${WHISPER_TMPDIR}/whisper_debug.log"
+
+        # DEBUG: output both raw and enhanced for comparison
+        printf '[DEBUG RAW]\n%s\n\n\n\t\t\t\t\t\n\n\n[ENHANCED]\n%s' "${raw_text}" "${processed}" > "${TEXT_FILE}"
+    else
+        notify "Whisper" "Post-processing failed — using raw transcript" "Basso"
+    fi
+}
 
 notify() {
     [ "${WHISPER_NOTIFICATIONS}" = "0" ] && return 0
@@ -349,6 +627,14 @@ stop_recording() {
 
     trim_text_file
 
+    # Post-process via Copilot API if enabled
+    if [ "${WHISPER_POST_PROCESS}" != "off" ] && [ -n "${WHISPER_POST_PROCESS}" ]; then
+        touch "${POSTPROCESSING_FILE}"
+        notify "Whisper" "Post-processing (${WHISPER_POST_PROCESS})..." ""
+        post_process_text
+        rm -f "${POSTPROCESSING_FILE}"
+    fi
+
     local result preview
     result="$(cat "${TEXT_FILE}" 2>/dev/null || true)"
 
@@ -442,7 +728,9 @@ restart_recording() {
 }
 
 status() {
-    if [ -f "${TRANSCRIBING_FILE}" ]; then
+    if [ -f "${POSTPROCESSING_FILE}" ]; then
+        printf 'postprocessing: yes\n'
+    elif [ -f "${TRANSCRIBING_FILE}" ]; then
         printf 'transcribing: yes\n'
     elif recording_running; then
         printf 'recording: running\n'

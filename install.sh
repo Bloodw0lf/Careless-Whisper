@@ -177,6 +177,7 @@ WHISPER_HOTKEY_TOGGLE="${HOTKEY_TOGGLE}"
 WHISPER_HOTKEY_STOP="${HOTKEY_STOP}"
 WHISPER_NOTIFICATIONS=1
 WHISPER_SOUNDS=1
+WHISPER_POST_PROCESS=off
 # Optional fixed device index: WHISPER_AUDIO_DEVICE_INDEX=1
 # Optional translate to English: WHISPER_TRANSLATE=1
 # Optional history size: WHISPER_HISTORY_MAX=10
@@ -225,6 +226,157 @@ pcall(function()
 end)
 LUAEOF
         echo "==> Updated ${HAMMERSPOON_INIT}"
+    fi
+fi
+echo
+
+# ── Copilot API token (for AI post-processing) ───────────────────────────────
+
+WHISPER_AUTH_DIR="${HOME}/.config/careless-whisper"
+WHISPER_AUTH_FILE="${WHISPER_AUTH_DIR}/auth.json"
+COPILOT_CLIENT_ID="Iv1.b507a08c87ecfe98"
+
+copilot_token_exists() {
+    # Check our own auth file
+    if [ -f "${WHISPER_AUTH_FILE}" ]; then
+        local tok
+        tok="$(python3 -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+print(data.get('access_token', ''))
+" "${WHISPER_AUTH_FILE}" 2>/dev/null || true)"
+        if [ -n "${tok}" ] && [ "${#tok}" -gt 10 ]; then
+            printf '%s' "careless-whisper auth (${WHISPER_AUTH_FILE})"
+            return 0
+        fi
+    fi
+
+    # Check opencode auth paths
+    for auth_path in \
+        "${HOME}/Library/Application Support/opencode/auth.json" \
+        "${HOME}/.local/share/opencode/auth.json"; do
+        if [ -f "${auth_path}" ]; then
+            printf '%s' "opencode (${auth_path})"
+            return 0
+        fi
+    done
+
+    # Check environment variables
+    if [ -n "${GITHUB_COPILOT_TOKEN:-}" ]; then
+        printf '%s' "GITHUB_COPILOT_TOKEN env var"
+        return 0
+    fi
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        printf '%s' "GITHUB_TOKEN env var"
+        return 0
+    fi
+
+    return 1
+}
+
+copilot_device_flow() {
+    echo "==> Authenticating with GitHub for Copilot API access..."
+    echo "    This uses the GitHub Device Flow (same as VS Code / copilot.vim)."
+    echo
+
+    # Step 1: Request device code
+    local device_response
+    device_response="$(curl -s -X POST "https://github.com/login/device/code" \
+        -H "Accept: application/json" \
+        -d "client_id=${COPILOT_CLIENT_ID}&scope=copilot" 2>/dev/null)"
+
+    if [ -z "${device_response}" ]; then
+        echo "    ERROR: Could not reach github.com. Check your network."
+        return 1
+    fi
+
+    local device_code user_code verification_uri interval
+    device_code="$(python3 -c "import json,sys; print(json.load(sys.stdin)['device_code'])" <<< "${device_response}" 2>/dev/null)"
+    user_code="$(python3 -c "import json,sys; print(json.load(sys.stdin)['user_code'])" <<< "${device_response}" 2>/dev/null)"
+    verification_uri="$(python3 -c "import json,sys; print(json.load(sys.stdin)['verification_uri'])" <<< "${device_response}" 2>/dev/null)"
+    interval="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('interval', 5))" <<< "${device_response}" 2>/dev/null)"
+
+    if [ -z "${device_code}" ] || [ -z "${user_code}" ]; then
+        echo "    ERROR: Unexpected response from GitHub."
+        echo "    ${device_response}"
+        return 1
+    fi
+
+    # Step 2: Show code and open browser
+    echo "    ┌─────────────────────────────────────────┐"
+    echo "    │                                         │"
+    echo "    │   Enter this code:  ${user_code}          │"
+    echo "    │                                         │"
+    echo "    └─────────────────────────────────────────┘"
+    echo
+    echo "    Opening ${verification_uri} in your browser..."
+    open "${verification_uri}" 2>/dev/null || true
+    echo "    Waiting for authorization..."
+
+    # Step 3: Poll for token
+    local max_attempts=60
+    local attempt=0
+    while [ "${attempt}" -lt "${max_attempts}" ]; do
+        sleep "${interval}"
+        attempt=$((attempt + 1))
+
+        local token_response
+        token_response="$(curl -s -X POST "https://github.com/login/oauth/access_token" \
+            -H "Accept: application/json" \
+            -d "client_id=${COPILOT_CLIENT_ID}&device_code=${device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code" 2>/dev/null)"
+
+        local error access_token
+        error="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('error', ''))" <<< "${token_response}" 2>/dev/null)"
+
+        if [ "${error}" = "authorization_pending" ]; then
+            continue
+        elif [ "${error}" = "slow_down" ]; then
+            interval=$((interval + 5))
+            continue
+        elif [ -z "${error}" ]; then
+            access_token="$(python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token', ''))" <<< "${token_response}" 2>/dev/null)"
+            if [ -n "${access_token}" ] && [ "${#access_token}" -gt 10 ]; then
+                # Step 4: Store token
+                mkdir -p "${WHISPER_AUTH_DIR}"
+                python3 -c "
+import json, sys
+with open(sys.argv[1], 'w') as f:
+    json.dump({'access_token': sys.argv[2]}, f)
+" "${WHISPER_AUTH_FILE}" "${access_token}"
+                chmod 600 "${WHISPER_AUTH_FILE}"
+                echo
+                echo "    Authenticated successfully."
+                echo "    Token stored in ${WHISPER_AUTH_FILE}"
+                return 0
+            fi
+        else
+            echo
+            echo "    ERROR: ${error}"
+            return 1
+        fi
+    done
+
+    echo
+    echo "    Timed out waiting for authorization."
+    return 1
+}
+
+# Check if we already have a working token
+COPILOT_TOKEN_SOURCE=""
+if COPILOT_TOKEN_SOURCE="$(copilot_token_exists)"; then
+    echo "==> Copilot API token found via ${COPILOT_TOKEN_SOURCE}"
+    echo "    AI post-processing modes available (select via menubar)."
+else
+    echo "==> Copilot API token not found."
+    echo "    AI post-processing requires a GitHub Copilot subscription."
+    echo
+    read -rp "    Authenticate with GitHub now? [Y/n]: " DO_AUTH
+    DO_AUTH="${DO_AUTH:-Y}"
+    if [[ "${DO_AUTH}" =~ ^[Yy]$ ]]; then
+        copilot_device_flow || true
+    else
+        echo "    Skipped. You can authenticate later by re-running ./install.sh"
+        echo "    Or set GITHUB_COPILOT_TOKEN in your shell profile."
     fi
 fi
 echo

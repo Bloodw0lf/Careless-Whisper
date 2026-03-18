@@ -42,6 +42,7 @@ local model_dir   = script_dir .. "/models"
 local history_file = read_conf("WHISPER_HISTORY_FILE", script_dir .. "/history.txt")
 
 local spinner_frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+local pp_spinner_frames = {"◰", "◳", "◲", "◱"}
 local spinner_index = 1
 local spinner_timer = nil
 local recording_start = nil
@@ -55,14 +56,16 @@ local function format_duration(seconds)
     return string.format("%d:%02d", m, s)
 end
 
-local function start_spinner()
+local function start_spinner(frames, tooltip)
     if spinner_timer then return end
-    spinner_timer = hs.timer.doEvery(0.1, function()
+    local f = frames or spinner_frames
+    local tip = tooltip or "Whisper: transcribing..."
+    spinner_timer = hs.timer.doEvery(0.12, function()
         if status_item then
-            status_item:setTitle(spinner_frames[spinner_index])
-            status_item:setTooltip("Whisper: transcribing...")
+            status_item:setTitle(f[spinner_index])
+            status_item:setTooltip(tip)
         end
-        spinner_index = (spinner_index % #spinner_frames) + 1
+        spinner_index = (spinner_index % #f) + 1
     end)
 end
 
@@ -78,7 +81,12 @@ local function set_indicator(state)
     if not status_item then return end
     current_state = state
 
-    if state == "transcribing" then
+    if state == "postprocessing" then
+        if recording_display_timer then recording_display_timer:stop(); recording_display_timer = nil end
+        recording_start = nil
+        stop_spinner()
+        start_spinner(pp_spinner_frames, "Whisper: post-processing...")
+    elseif state == "transcribing" then
         if recording_display_timer then recording_display_timer:stop(); recording_display_timer = nil end
         recording_start = nil
         start_spinner()
@@ -115,7 +123,9 @@ local function update_indicator()
     local task = hs.task.new(whisper_script, function(exit_code, std_out, _)
         status_poll_running = false
         if exit_code == 0 and std_out then
-            if std_out:match("transcribing:%s+yes") then
+            if std_out:match("postprocessing:%s+yes") then
+                set_indicator("postprocessing")
+            elseif std_out:match("transcribing:%s+yes") then
                 set_indicator("transcribing")
             elseif std_out:match("recording:%s+running") then
                 set_indicator("recording")
@@ -365,6 +375,39 @@ local function build_menu()
             update_conf_value("WHISPER_SOUNDS", new_val)
             alert("Sounds " .. (sound_on and "off" or "on"))
         end,
+    }
+    menu[#menu + 1] = { title = "-" }
+
+    -- Post-processing mode selector
+    local pp_mode = read_conf("WHISPER_POST_PROCESS", "off")
+    local pp_modes = {
+        { id = "off",        label = "Off (raw transcript)" },
+        { id = "clean",      label = "Clean (remove fillers)" },
+        { id = "message",    label = "Messenger (WebEx/Teams)" },
+        { id = "email",      label = "Email (formal)" },
+        { id = "prompt",     label = "Prompt (light cleanup)" },
+        { id = "prompt-pro", label = "Prompt Pro (best practice)" },
+    }
+    local pp_submenu = {}
+    for _, m in ipairs(pp_modes) do
+        local is_active = (m.id == pp_mode)
+        local captured_id = m.id
+        local captured_label = m.label
+        pp_submenu[#pp_submenu + 1] = {
+            title = (is_active and "✓ " or "   ") .. m.label,
+            fn = function()
+                if not is_active then
+                    update_conf_value("WHISPER_POST_PROCESS", captured_id)
+                    alert("Post-process → " .. captured_label)
+                end
+            end,
+            disabled = is_active,
+        }
+    end
+    local pp_display = pp_mode == "off" and "Off" or pp_mode:sub(1,1):upper() .. pp_mode:sub(2)
+    menu[#menu + 1] = {
+        title = "Post-process: " .. pp_display,
+        menu = pp_submenu,
     }
     menu[#menu + 1] = { title = "-" }
 

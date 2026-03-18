@@ -39,13 +39,42 @@ Both are configurable in `whisper-stt.conf` and applied on Hammerspoon reload.
 | `○`      | Idle                          |
 | `● 0:12` | Recording (with elapsed time) |
 | `⠋⠙⠹…`   | Transcribing                  |
+| `◰◳◲◱`   | Post-processing (AI)          |
 
 Click the icon for a dropdown with:
 
 - **Toggle / Stop** controls
 - **Notifications / Sounds** on/off toggles
 - **Model selector** — switch models without editing config
+- **Post-processing mode** — AI-powered text enhancement (see below)
 - **Recent Transcriptions** — click to copy to clipboard
+
+## AI Post-Processing
+
+Careless Whisper can enhance transcriptions using the GitHub Copilot API. Select a mode from the menubar dropdown:
+
+| Mode           | Description                                                      |
+| -------------- | ---------------------------------------------------------------- |
+| **Off**        | Raw transcript, no processing                                    |
+| **Clean**      | Remove fillers, fix punctuation, strip Whisper hallucinations    |
+| **Messenger**  | Concise message for WebEx/Teams — compact, no paragraph breaks   |
+| **Email**      | Professional email body with greeting, no sign-off               |
+| **Prompt**     | Light cleanup of a dictated AI prompt — preserves intent exactly |
+| **Prompt Pro** | Full prompt engineering — adds role, constraints, structure      |
+
+All modes handle spelling hints ("MAP, also M-A-B" → MAB) and keep the original language.
+
+### Copilot Token
+
+Post-processing requires a GitHub Copilot token. The token is resolved automatically from (first match wins):
+
+1. `GITHUB_COPILOT_TOKEN` environment variable
+2. [opencode](https://opencode.ai) auth file (`~/Library/Application Support/opencode/auth.json`)
+3. `GITHUB_TOKEN` environment variable
+
+**Recommended setup:** Install [opencode](https://opencode.ai), run `opencode auth`, and authenticate with your GitHub account. The token is then shared automatically.
+
+Without a valid token, post-processing is skipped silently and the raw transcript is used.
 
 ## Models
 
@@ -90,6 +119,7 @@ All settings live in `whisper-stt.conf` (created by the installer, gitignored):
 | `WHISPER_SOUNDS`        | `1`                              | `0` = disable sounds                       |
 | `WHISPER_HOTKEY_TOGGLE` | `shift,cmd,r`                    | Toggle hotkey                              |
 | `WHISPER_HOTKEY_STOP`   | `shift,cmd,q`                    | Emergency stop hotkey                      |
+| `WHISPER_POST_PROCESS`  | `off`                            | Post-processing mode (or use menubar)      |
 
 ## Uninstall
 
