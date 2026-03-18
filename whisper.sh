@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # System-wide speech-to-text using whisper.cpp
-# Usage: whisper.sh start|stop|toggle|list-devices|status
+# Usage: whisper.sh start|stop|toggle|restart-recording|list-devices|list-models|download-model|auth|status
 #
 
 set -uo pipefail
@@ -311,6 +311,10 @@ Spelling hints in speech:
 - Output ONLY the enhanced prompt, nothing else — no explanations, no quotes, no meta-commentary
 PROMPT
             ;;
+        *)
+            printf 'Unknown post-processing mode: %s\n' "${mode}" >&2
+            return 1
+            ;;
     esac
 }
 
@@ -356,15 +360,25 @@ print(json.dumps({
         return 1
     fi
 
-    local response
-    response="$(curl -s --max-time 120 \
+    local response http_code
+    response="$(curl -s --max-time 120 -w '\n%{http_code}' \
         -H "Authorization: Bearer ${token}" \
         "${COPILOT_API_HEADERS[@]}" \
         -d "${payload}" \
         "${COPILOT_API_URL}" 2>/dev/null)"
 
+    http_code="$(tail -n1 <<< "${response}")"
+    response="$(sed '$ d' <<< "${response}")"
+
     if [ -z "${response}" ]; then
         notify "Whisper" "Post-processing failed — no API response" "Basso"
+        return 1
+    fi
+
+    # Token expired or revoked — remove stale token, prompt re-auth via menubar
+    if [ "${http_code}" = "401" ] || [ "${http_code}" = "403" ]; then
+        rm -f "${WHISPER_AUTH_FILE}"
+        notify "Whisper" "Copilot token expired — sign in again via menubar" "Basso"
         return 1
     fi
 
@@ -378,14 +392,7 @@ if choices:
 " <<< "${response}" 2>/dev/null)"
 
     if [ -n "${processed}" ]; then
-        # DEBUG: log raw vs refined for prompt tuning
-        {
-            printf '=== %s [%s] ===\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${mode}"
-            printf '--- RAW ---\n%s\n\n--- REFINED ---\n%s\n\n' "${raw_text}" "${processed}"
-        } >> "${WHISPER_TMPDIR}/whisper_debug.log"
-
-        # DEBUG: output both raw and enhanced for comparison
-        printf '[DEBUG RAW]\n%s\n\n\n\t\t\t\t\t\n\n\n[ENHANCED]\n%s' "${raw_text}" "${processed}" > "${TEXT_FILE}"
+        printf '%s' "${processed}" > "${TEXT_FILE}"
     else
         notify "Whisper" "Post-processing failed — using raw transcript" "Basso"
     fi

@@ -43,9 +43,25 @@ for tmpdir in "${TMPDIR:-}" /tmp; do
           "${tmpdir}/whisper_recording.pid" \
           "${tmpdir}/whisper_output.txt" \
           "${tmpdir}/whisper_transcribing" \
+          "${tmpdir}/whisper_postprocessing" \
+          "${tmpdir}/whisper_segment_index" \
+          "${tmpdir}/whisper_debug.log" \
           "${tmpdir}/ffmpeg.log" \
           "${tmpdir}/whisper-error.log"
+    rm -rf "${tmpdir}/whisper_segments"
 done
+
+# Remove auth token
+if [ -f "${HOME}/.config/careless-whisper/auth.json" ]; then
+    read -rp "    Remove Copilot auth token (~/.config/careless-whisper/auth.json)? [y/N]: " REMOVE_AUTH
+    if [[ "${REMOVE_AUTH}" =~ ^[Yy]$ ]]; then
+        rm -f "${HOME}/.config/careless-whisper/auth.json"
+        rmdir "${HOME}/.config/careless-whisper" 2>/dev/null || true
+        echo "    Removed auth token"
+    else
+        echo "    Kept auth token"
+    fi
+fi
 echo "    Done"
 echo
 

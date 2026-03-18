@@ -53,6 +53,12 @@ install_brew_pkg() {
     fi
 }
 
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: python3 not found. Install Xcode Command Line Tools:"
+    echo "       xcode-select --install"
+    exit 1
+fi
+
 install_brew_pkg ffmpeg ffmpeg
 install_brew_pkg whisper-cli whisper-cpp
 

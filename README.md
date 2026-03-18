@@ -66,15 +66,17 @@ All modes handle spelling hints ("MAP, also M-A-B" → MAB) and keep the origina
 
 ### Copilot Token
 
-Post-processing requires a GitHub Copilot token. The token is resolved automatically from (first match wins):
+Post-processing requires a GitHub Copilot subscription. Authentication uses the GitHub OAuth Device Flow (same as VS Code / copilot.vim).
 
-1. `GITHUB_COPILOT_TOKEN` environment variable
-2. [opencode](https://opencode.ai) auth file (`~/Library/Application Support/opencode/auth.json`)
-3. `GITHUB_TOKEN` environment variable
+**Setup options:**
 
-**Recommended setup:** Install [opencode](https://opencode.ai), run `opencode auth`, and authenticate with your GitHub account. The token is then shared automatically.
+- **Menubar:** Click the Whisper menubar icon → "Sign in to GitHub Copilot…" — code is copied to clipboard, browser opens for authorization
+- **Installer:** Run `./install.sh` — prompts for authentication during setup
+- **Manual:** Set `GITHUB_COPILOT_TOKEN` environment variable
 
-Without a valid token, post-processing is skipped silently and the raw transcript is used.
+The token is stored in `~/.config/careless-whisper/auth.json` (permissions `600`). If the token expires, post-processing notifies you and the menubar shows the sign-in option again.
+
+Without a valid token, the menubar shows "Sign in to GitHub Copilot…" instead of mode selection, and the raw transcript is used.
 
 ## Models
 
@@ -132,16 +134,17 @@ Removes Hammerspoon integration and temp files. Optionally uninstalls Homebrew p
 ## Architecture
 
 ```
-Ctrl+Cmd+W  →  Hammerspoon (whisper_hotkeys.lua)
-                    │  hs.task.new()
-                    ▼
-               whisper.sh toggle
-                    ├─ [start]  ffmpeg → $TMPDIR/whisper_recording.wav
-                    └─ [stop]   whisper-cli transcribes
-                                    ├─ spinner in menubar
-                                    ├─ append to history.txt
-                                    ├─ copy to clipboard
-                                    └─ auto-paste via AppleScript
+⇧⌘R  →  Hammerspoon (whisper_hotkeys.lua)
+              │  hs.task.new()
+              ▼
+         whisper.sh toggle
+              ├─ [start]  ffmpeg → segment recording (16kHz mono WAV)
+              └─ [stop]   concat segments → whisper-cli transcribes
+                               ├─ spinner in menubar (⠋⠙⠹…)
+                               ├─ [if post-process] Copilot API → ◰◳◲◱
+                               ├─ append to history.txt
+                               ├─ copy to clipboard
+                               └─ auto-paste via AppleScript
 ```
 
 ## Troubleshooting
