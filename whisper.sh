@@ -53,6 +53,11 @@ WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-${WHISPER_AUDIO_DEVICE_INDEX:-defa
 
 # Post-processing mode: off | clean | message | email | prompt | prompt-pro
 WHISPER_POST_PROCESS="${WHISPER_POST_PROCESS:-off}"
+# Copilot model for post-processing (via /chat/completions).
+# Verified working: claude-opus-4.5, claude-opus-4.6, claude-sonnet-4.6,
+#   claude-sonnet-4.5, claude-sonnet-4, claude-haiku-4.5, gpt-5.2,
+#   gpt-5-mini, gpt-4.1, gpt-4o, gpt-4o-mini, gemini-3-pro-preview,
+#   gemini-3-flash-preview
 WHISPER_COPILOT_MODEL="${WHISPER_COPILOT_MODEL:-claude-sonnet-4.6}"
 
 find_bin() {
@@ -82,8 +87,8 @@ WHISPER_AUTH_DIR="${HOME}/.config/careless-whisper"
 WHISPER_AUTH_FILE="${WHISPER_AUTH_DIR}/auth.json"
 COPILOT_API_HEADERS=(
     -H "Content-Type: application/json"
-    -H "Editor-Version: vscode/1.100.0"
-    -H "Editor-Plugin-Version: copilot-chat/0.28.0"
+    -H "Editor-Version: vscode/1.120.0"
+    -H "Editor-Plugin-Version: copilot-chat/0.35.0"
     -H "Copilot-Integration-Id: vscode-chat"
 )
 
@@ -362,22 +367,46 @@ print(json.dumps({
     fi
 
     local response http_code
-    response="$(curl -s --max-time 120 -w '\n%{http_code}' \
-        -H "Authorization: Bearer ${token}" \
-        "${COPILOT_API_HEADERS[@]}" \
-        -d "${payload}" \
-        "${COPILOT_API_URL}" 2>/dev/null)"
+    local max_retries=3
+    local attempt=0
 
-    http_code="$(tail -n1 <<< "${response}")"
-    response="$(sed '$ d' <<< "${response}")"
+    while [ "${attempt}" -lt "${max_retries}" ]; do
+        attempt=$((attempt + 1))
+
+        response="$(curl -s --max-time 120 -w '\n%{http_code}' \
+            -H "Authorization: Bearer ${token}" \
+            "${COPILOT_API_HEADERS[@]}" \
+            -d "${payload}" \
+            "${COPILOT_API_URL}" 2>/dev/null)"
+
+        http_code="$(tail -n1 <<< "${response}")"
+        response="$(sed '$ d' <<< "${response}")"
+
+        # Success
+        if [ "${http_code}" = "200" ] && [ -n "${response}" ]; then
+            break
+        fi
+
+        # Token expired or revoked — no point retrying
+        if [ "${http_code}" = "401" ]; then
+            rm -f "${WHISPER_AUTH_FILE}"
+            notify "Whisper" "Copilot token expired — sign in again via menubar" "Basso"
+            return 1
+        fi
+
+        # Rate limit (403) or empty response or other transient error — retry
+        if [ "${attempt}" -lt "${max_retries}" ]; then
+            sleep $((3 * attempt))
+        fi
+    done
 
     if [ -z "${response}" ]; then
-        notify "Whisper" "Post-processing failed — no API response" "Basso"
+        notify "Whisper" "Post-processing failed — no API response after ${max_retries} attempts" "Basso"
         return 1
     fi
 
-    # Token expired or revoked — remove stale token, prompt re-auth via menubar
-    if [ "${http_code}" = "401" ] || [ "${http_code}" = "403" ]; then
+    # Persistent 403 after retries — likely token issue, not just rate limit
+    if [ "${http_code}" = "403" ]; then
         rm -f "${WHISPER_AUTH_FILE}"
         notify "Whisper" "Copilot token expired — sign in again via menubar" "Basso"
         return 1
