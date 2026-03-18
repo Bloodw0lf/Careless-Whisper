@@ -251,23 +251,9 @@ print(data.get('access_token', ''))
         fi
     fi
 
-    # Check opencode auth paths
-    for auth_path in \
-        "${HOME}/Library/Application Support/opencode/auth.json" \
-        "${HOME}/.local/share/opencode/auth.json"; do
-        if [ -f "${auth_path}" ]; then
-            printf '%s' "opencode (${auth_path})"
-            return 0
-        fi
-    done
-
     # Check environment variables
     if [ -n "${GITHUB_COPILOT_TOKEN:-}" ]; then
         printf '%s' "GITHUB_COPILOT_TOKEN env var"
-        return 0
-    fi
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        printf '%s' "GITHUB_TOKEN env var"
         return 0
     fi
 
@@ -302,15 +288,22 @@ copilot_device_flow() {
         return 1
     fi
 
-    # Step 2: Show code and open browser
+    # Step 2: Show code, let user copy, then open browser
+    echo
     echo "    ┌─────────────────────────────────────────┐"
     echo "    │                                         │"
-    echo "    │   Enter this code:  ${user_code}          │"
+    echo "    │   Your code:  ${user_code}                 │"
     echo "    │                                         │"
     echo "    └─────────────────────────────────────────┘"
     echo
-    echo "    Opening ${verification_uri} in your browser..."
+    echo "    Copy this code, then paste it on the GitHub page."
+    echo
+    # Copy to clipboard automatically on macOS
+    printf '%s' "${user_code}" | pbcopy 2>/dev/null && \
+        echo "    (Copied to clipboard automatically)" && echo
+    read -rp "    Press Enter to open ${verification_uri} ..."
     open "${verification_uri}" 2>/dev/null || true
+    echo
     echo "    Waiting for authorization..."
 
     # Step 3: Poll for token

@@ -89,50 +89,19 @@ resolve_copilot_token() {
         return 0
     fi
 
-    # Check careless-whisper own auth file (from install.sh device flow)
-    local own_auth="${HOME}/.config/careless-whisper/auth.json"
-    if [ -f "${own_auth}" ]; then
+    # Check careless-whisper auth file (from install.sh device flow)
+    local auth_file="${HOME}/.config/careless-whisper/auth.json"
+    if [ -f "${auth_file}" ]; then
         local token
         token="$(python3 -c "
 import json, sys
 data = json.load(open(sys.argv[1]))
 print(data.get('access_token', ''))
-" "${own_auth}" 2>/dev/null || true)"
+" "${auth_file}" 2>/dev/null || true)"
         if [ -n "${token}" ] && [ "${#token}" -gt 10 ]; then
             printf '%s' "${token}"
             return 0
         fi
-    fi
-
-    local home="${HOME}"
-    local auth_paths=(
-        "${home}/Library/Application Support/opencode/auth.json"
-        "${home}/.local/share/opencode/auth.json"
-    )
-
-    for auth_path in "${auth_paths[@]}"; do
-        if [ -f "${auth_path}" ]; then
-            local token
-            # Try nested object format: {"github-copilot": {"access": "gho_..."}}
-            token="$(python3 -c "
-import json, sys
-data = json.load(open(sys.argv[1]))
-entry = data.get('github-copilot', {})
-if isinstance(entry, dict):
-    print(entry.get('access', ''))
-elif isinstance(entry, str):
-    print(entry)
-" "${auth_path}" 2>/dev/null || true)"
-            if [ -n "${token}" ] && [ "${#token}" -gt 10 ]; then
-                printf '%s' "${token}"
-                return 0
-            fi
-        fi
-    done
-
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        printf '%s' "${GITHUB_TOKEN}"
-        return 0
     fi
 
     return 1
