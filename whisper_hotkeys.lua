@@ -3,8 +3,8 @@
 
 local home = os.getenv("HOME")
 -- Paths are set automatically by install.sh
-local whisper_script = home .. "/Careless-Whisper/whisper.sh"
-local conf_file      = home .. "/Careless-Whisper/whisper-stt.conf"
+local whisper_script = home .. "/Scripts/Careless-Whisper/whisper.sh"
+local conf_file      = home .. "/Scripts/Careless-Whisper/whisper-stt.conf"
 
 -- Read a value from whisper-stt.conf
 local function read_conf(key, default)
@@ -32,6 +32,10 @@ local toggle_mods, toggle_key = parse_hotkey(read_conf("WHISPER_HOTKEY_TOGGLE", 
 local stop_mods,   stop_key   = parse_hotkey(read_conf("WHISPER_HOTKEY_STOP",   "shift,cmd,q"))
 
 local status_item = hs.menubar.new()
+
+local function alert(msg, duration)
+    hs.alert.show(msg, duration)
+end
 
 local script_dir  = whisper_script:match("(.+)/[^/]+$") or "."
 local model_dir   = script_dir .. "/models"
@@ -135,7 +139,7 @@ local whisper_busy_safety = nil
 
 local function run_whisper(action)
     if action == "toggle" and whisper_busy then
-        hs.alert.show("Whisper: transcription in progress…")
+        alert("Whisper: transcription in progress…")
         return
     end
 
@@ -262,13 +266,13 @@ end
 
 local function download_model(model_name)
     if download_in_progress[model_name] then
-        hs.alert.show("Already downloading " .. model_name)
+        alert("Already downloading " .. model_name)
         return
     end
 
     download_in_progress[model_name] = true
     local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
-    hs.alert.show("Downloading " .. display .. "…")
+    alert("Downloading " .. display .. "…")
 
     local part_path = model_dir .. "/" .. model_name .. ".part"
     start_download_progress(model_name, part_path)
@@ -278,12 +282,12 @@ local function download_model(model_name)
         stop_download_progress()
         if exit_code == 0 then
             if std_out and std_out:match("already_exists") then
-                hs.alert.show(display .. " already installed")
+                alert(display .. " already installed")
             else
-                hs.alert.show(display .. " ready ✓")
+                alert(display .. " ready ✓")
             end
         else
-            hs.alert.show("Download failed: " .. display)
+            alert("Download failed: " .. display)
         end
     end, {"download-model", model_name})
 
@@ -292,7 +296,7 @@ local function download_model(model_name)
     else
         download_in_progress[model_name] = nil
         stop_download_progress()
-        hs.alert.show("Failed to start download")
+        alert("Failed to start download")
     end
 end
 
@@ -326,13 +330,13 @@ end
 local function set_active_model(model_name)
     local new_path = model_dir .. "/" .. model_name
     if not update_conf_value("WHISPER_MODEL_PATH", new_path) then
-        hs.alert.show("Cannot update config file")
+        alert("Cannot update config file")
         return
     end
 
     -- Pretty name without ggml- prefix and .bin suffix for display
     local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
-    hs.alert.show("Model → " .. display)
+    alert("Model → " .. display)
 end
 
 local function build_menu()
@@ -351,7 +355,7 @@ local function build_menu()
         fn = function()
             local new_val = notif_on and "0" or "1"
             update_conf_value("WHISPER_NOTIFICATIONS", new_val)
-            hs.alert.show("Notifications " .. (notif_on and "off" or "on"))
+            alert("Notifications " .. (notif_on and "off" or "on"))
         end,
     }
     menu[#menu + 1] = {
@@ -359,7 +363,7 @@ local function build_menu()
         fn = function()
             local new_val = sound_on and "0" or "1"
             update_conf_value("WHISPER_SOUNDS", new_val)
-            hs.alert.show("Sounds " .. (sound_on and "off" or "on"))
+            alert("Sounds " .. (sound_on and "off" or "on"))
         end,
     }
     menu[#menu + 1] = { title = "-" }
@@ -426,7 +430,7 @@ local function build_menu()
                 title = preview,
                 fn = function()
                     hs.pasteboard.setContents(captured_text)
-                    hs.alert.show("Copied to clipboard")
+                    alert("Copied to clipboard")
                 end,
                 tooltip = entry.timestamp,
             }
@@ -443,7 +447,43 @@ end
 hs.hotkey.bind(toggle_mods, toggle_key, function() run_whisper("toggle") end)
 hs.hotkey.bind(stop_mods,   stop_key,   function() run_whisper("stop")   end)
 
+-- Audio device change watcher: auto-restart recording when input device changes
+local restart_in_progress = false
+local restart_debounce_timer = nil
+
+hs.audiodevice.watcher.setCallback(function(event)
+    if event ~= "dIn" or current_state ~= "recording" or restart_in_progress then
+        return
+    end
+    -- Debounce: macOS may fire multiple events during device handoff
+    if restart_debounce_timer then restart_debounce_timer:stop() end
+    restart_debounce_timer = hs.timer.doAfter(1.0, function()
+        restart_debounce_timer = nil
+        if current_state ~= "recording" or restart_in_progress then return end
+
+        restart_in_progress = true
+        local new_device = hs.audiodevice.defaultInputDevice()
+        local device_name = new_device and new_device:name() or "unknown"
+        alert("🎙 Input → " .. device_name)
+
+        local task = hs.task.new(whisper_script, function(exit_code, _, _)
+            restart_in_progress = false
+            if exit_code ~= 0 then
+                alert("Whisper: device restart failed")
+            end
+            hs.timer.doAfter(0.4, update_indicator)
+        end, {"restart-recording"})
+
+        if task then
+            task:start()
+        else
+            restart_in_progress = false
+        end
+    end)
+end)
+hs.audiodevice.watcher.start()
+
 hs.timer.doEvery(3.0, update_indicator)
 update_indicator()
 
-hs.alert.show("Whisper: " .. table.concat(toggle_mods, "+") .. "+" .. toggle_key .. " start/stop")
+alert("Whisper: " .. table.concat(toggle_mods, "+") .. "+" .. toggle_key .. " start/stop")

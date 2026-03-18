@@ -38,6 +38,9 @@ WHISPER_HISTORY_FILE="${WHISPER_HISTORY_FILE:-${SCRIPT_DIR}/history.txt}"
 TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-${WHISPER_TMPDIR}/whisper_transcribing}"
 WHISPER_HISTORY_MAX="${WHISPER_HISTORY_MAX:-10}"
 
+SEGMENTS_DIR="${WHISPER_TMPDIR}/whisper_segments"
+SEGMENT_INDEX_FILE="${WHISPER_TMPDIR}/whisper_segment_index"
+
 WHISPER_NOTIFICATIONS="${WHISPER_NOTIFICATIONS:-1}"
 WHISPER_SOUNDS="${WHISPER_SOUNDS:-1}"
 WHISPER_HOTKEY_TOGGLE="${WHISPER_HOTKEY_TOGGLE:-shift,cmd,r}"
@@ -144,6 +147,42 @@ cleanup_stale_transcribing_file() {
     fi
 }
 
+current_segment_file() {
+    local idx
+    idx="$(cat "${SEGMENT_INDEX_FILE}" 2>/dev/null || echo 1)"
+    printf '%s/segment_%03d.wav\n' "${SEGMENTS_DIR}" "${idx}"
+}
+
+next_segment_index() {
+    local idx
+    idx="$(cat "${SEGMENT_INDEX_FILE}" 2>/dev/null || echo 1)"
+    printf '%s\n' "$(( idx + 1 ))" > "${SEGMENT_INDEX_FILE}"
+}
+
+concat_segments() {
+    local -a valid_segments=()
+    for seg in "${SEGMENTS_DIR}"/segment_*.wav; do
+        [ -f "${seg}" ] && [ -s "${seg}" ] && valid_segments+=("${seg}")
+    done
+
+    if [ "${#valid_segments[@]}" -eq 0 ]; then
+        return 1
+    elif [ "${#valid_segments[@]}" -eq 1 ]; then
+        mv "${valid_segments[0]}" "${AUDIO_FILE}"
+    else
+        local concat_list="${WHISPER_TMPDIR}/whisper_concat.txt"
+        rm -f "${concat_list}"
+        for seg in "${valid_segments[@]}"; do
+            printf "file '%s'\n" "${seg}" >> "${concat_list}"
+        done
+        if ! "${FFMPEG_BIN}" -f concat -safe 0 -i "${concat_list}" -c copy -y "${AUDIO_FILE}" >/dev/null 2>&1; then
+            rm -f "${concat_list}"
+            return 1
+        fi
+        rm -f "${concat_list}"
+    fi
+}
+
 recording_running() {
     cleanup_stale_pid_file
     if [ ! -f "${PID_FILE}" ]; then
@@ -214,7 +253,12 @@ start_recording() {
     fi
 
     rm -f "${AUDIO_FILE}" "${TEXT_FILE}" "${PID_FILE}"
+    rm -rf "${SEGMENTS_DIR}" "${SEGMENT_INDEX_FILE}"
+    mkdir -p "${SEGMENTS_DIR}"
+    printf '1\n' > "${SEGMENT_INDEX_FILE}"
 
+    local segment_file
+    segment_file="$(current_segment_file)"
     local audio_input
     audio_input="$(resolve_audio_input)"
 
@@ -229,7 +273,7 @@ start_recording() {
         -t "${MAX_SECONDS}" \
         -ar 16000 \
         -ac 1 \
-        -y "${AUDIO_FILE}" >"${LOG_FILE}" 2>&1 &
+        -y "${segment_file}" >"${LOG_FILE}" 2>&1 &
 
     printf '%s\n' "$!" > "${PID_FILE}"
     sleep 0.6
@@ -269,15 +313,18 @@ stop_recording() {
     rm -f "${PID_FILE}"
     touch "${TRANSCRIBING_FILE}"
 
-    for _ in $(seq 1 15); do
-        if [ -f "${AUDIO_FILE}" ] && [ -s "${AUDIO_FILE}" ]; then
-            break
-        fi
-        sleep 0.1
-    done
+    sleep 0.3
+
+    if ! concat_segments; then
+        rm -f "${TRANSCRIBING_FILE}"
+        rm -rf "${SEGMENTS_DIR}" "${SEGMENT_INDEX_FILE}"
+        notify "Whisper" "No audio recorded. Check microphone settings." "Basso"
+        return 1
+    fi
 
     if [ ! -f "${AUDIO_FILE}" ] || [ ! -s "${AUDIO_FILE}" ]; then
         rm -f "${TRANSCRIBING_FILE}"
+        rm -rf "${SEGMENTS_DIR}" "${SEGMENT_INDEX_FILE}"
         notify "Whisper" "No audio recorded. Check microphone settings." "Basso"
         return 1
     fi
@@ -329,6 +376,7 @@ stop_recording() {
     fi
 
     rm -f "${AUDIO_FILE}"
+    rm -rf "${SEGMENTS_DIR}" "${SEGMENT_INDEX_FILE}"
 }
 
 toggle_recording() {
@@ -344,6 +392,53 @@ toggle_recording() {
     else
         start_recording
     fi
+}
+
+restart_recording() {
+    if ! recording_running; then
+        return 1
+    fi
+
+    local pid
+    pid="$(cat "${PID_FILE}" 2>/dev/null || true)"
+
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+        kill -INT "${pid}" 2>/dev/null || true
+        for _ in $(seq 1 30); do
+            if ! kill -0 "${pid}" 2>/dev/null; then
+                break
+            fi
+            sleep 0.1
+        done
+        kill -0 "${pid}" 2>/dev/null && kill -9 "${pid}" 2>/dev/null || true
+    fi
+    rm -f "${PID_FILE}"
+
+    sleep 0.3
+
+    next_segment_index
+    local segment_file
+    segment_file="$(current_segment_file)"
+    local audio_input
+    audio_input="$(resolve_audio_input)"
+
+    nohup "${FFMPEG_BIN}" \
+        -f avfoundation \
+        -i ":${audio_input}" \
+        -t "${MAX_SECONDS}" \
+        -ar 16000 \
+        -ac 1 \
+        -y "${segment_file}" >"${LOG_FILE}" 2>&1 &
+
+    printf '%s\n' "$!" > "${PID_FILE}"
+    sleep 0.6
+
+    if ! recording_running; then
+        notify "Whisper" "Device changed but new input failed" "Basso"
+        return 1
+    fi
+
+    notify "Whisper" "Audio input changed — recording continues" ""
 }
 
 status() {
@@ -445,11 +540,14 @@ case "${ACTION}" in
     download-model)
         download_model "$@"
         ;;
+    restart-recording)
+        restart_recording
+        ;;
     status)
         status
         ;;
     *)
-        printf 'Usage: %s start|stop|toggle|list-devices|list-models|download-model|status\n' "$0" >&2
+        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|status\n' "$0" >&2
         exit 1
         ;;
 esac
