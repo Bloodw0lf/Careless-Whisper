@@ -397,9 +397,9 @@ local function build_menu()
             { id = "off",        label = "Off (raw transcript)" },
             { id = "clean",      label = "Clean (remove fillers)" },
             { id = "message",    label = "Messenger (WebEx/Teams)" },
-            { id = "email",      label = "Email (formal)" },
+            { id = "email",      label = "Email (Structures the intent)" },
             { id = "prompt",     label = "Prompt (light cleanup)" },
-            { id = "prompt-pro", label = "Prompt Pro (best practice)" },
+            { id = "prompt-pro", label = "Prompt Pro (Heavy Prompt-Engineering)" },
         }
         local pp_submenu = {}
         for _, m in ipairs(pp_modes) do
