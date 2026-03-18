@@ -53,7 +53,7 @@ WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-${WHISPER_AUDIO_DEVICE_INDEX:-defa
 
 # Post-processing mode: off | clean | message | email | prompt | prompt-pro
 WHISPER_POST_PROCESS="${WHISPER_POST_PROCESS:-off}"
-WHISPER_COPILOT_MODEL="${WHISPER_COPILOT_MODEL:-claude-sonnet-4.5}"
+WHISPER_COPILOT_MODEL="${WHISPER_COPILOT_MODEL:-claude-sonnet-4.6}"
 
 find_bin() {
     local name="$1"
@@ -82,8 +82,8 @@ WHISPER_AUTH_DIR="${HOME}/.config/careless-whisper"
 WHISPER_AUTH_FILE="${WHISPER_AUTH_DIR}/auth.json"
 COPILOT_API_HEADERS=(
     -H "Content-Type: application/json"
-    -H "Editor-Version: vscode/1.96.0"
-    -H "Editor-Plugin-Version: copilot-chat/0.23.0"
+    -H "Editor-Version: vscode/1.100.0"
+    -H "Editor-Plugin-Version: copilot-chat/0.28.0"
     -H "Copilot-Integration-Id: vscode-chat"
 )
 
