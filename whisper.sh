@@ -6,7 +6,7 @@
 
 set -uo pipefail
 
-WHISPER_VERSION="1.0.0"
+WHISPER_VERSION="$(cat "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/VERSION" 2>/dev/null || echo '0.0.0')"
 
 # Ensure UTF-8 text handling when launched from minimal environments (e.g. Hammerspoon).
 export LANG="${LANG:-en_US.UTF-8}"
@@ -33,6 +33,7 @@ MODEL="${WHISPER_MODEL_PATH:-${SCRIPT_DIR}/models/ggml-medium.bin}"
 WHISPER_LANGUAGE="${WHISPER_LANGUAGE:-auto}"
 WHISPER_TRANSLATE="${WHISPER_TRANSLATE:-0}"
 WHISPER_AUTO_PASTE="${WHISPER_AUTO_PASTE:-1}"
+WHISPER_AUTO_ENTER="${WHISPER_AUTO_ENTER:-0}"
 MAX_SECONDS="${WHISPER_MAX_SECONDS:-7200}"
 WHISPER_HISTORY_FILE="${WHISPER_HISTORY_FILE:-${SCRIPT_DIR}/history.txt}"
 TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-${WHISPER_TMPDIR}/whisper_transcribing}"
@@ -53,12 +54,22 @@ WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-${WHISPER_AUDIO_DEVICE_INDEX:-defa
 
 # Post-processing mode: off | clean | message | email | prompt | prompt-pro
 WHISPER_POST_PROCESS="${WHISPER_POST_PROCESS:-off}"
+# Post-processing backend: copilot | claude | local
+WHISPER_PP_BACKEND="${WHISPER_PP_BACKEND:-copilot}"
 # Copilot model for post-processing (via /chat/completions).
 # Verified working: claude-opus-4.5, claude-opus-4.6, claude-sonnet-4.6,
 #   claude-sonnet-4.5, claude-sonnet-4, claude-haiku-4.5, gpt-5.2,
 #   gpt-5-mini, gpt-4.1, gpt-4o, gpt-4o-mini, gemini-3-pro-preview,
 #   gemini-3-flash-preview
 WHISPER_COPILOT_MODEL="${WHISPER_COPILOT_MODEL:-claude-sonnet-4.6}"
+# Claude API (direct via api.anthropic.com)
+WHISPER_CLAUDE_API_KEY="${WHISPER_CLAUDE_API_KEY:-}"
+WHISPER_CLAUDE_MODEL="${WHISPER_CLAUDE_MODEL:-claude-sonnet-4-20250514}"
+# Local model via llama-server (llama.cpp)
+WHISPER_LOCAL_MODEL="${WHISPER_LOCAL_MODEL:-}"
+WHISPER_LOCAL_URL="${WHISPER_LOCAL_URL:-http://127.0.0.1:8085}"
+WHISPER_LOCAL_GPU_LAYERS="${WHISPER_LOCAL_GPU_LAYERS:-99}"
+WHISPER_LOCAL_CTX="${WHISPER_LOCAL_CTX:-8192}"
 
 find_bin() {
     local name="$1"
@@ -337,16 +348,32 @@ post_process_text() {
         return 0
     fi
 
+    local system_prompt
+    system_prompt="$(post_process_prompt "${mode}")"
+
+    local backend="${WHISPER_PP_BACKEND:-copilot}"
+    case "${backend}" in
+        copilot) pp_via_copilot  "${raw_text}" "${system_prompt}" ;;
+        claude)  pp_via_claude   "${raw_text}" "${system_prompt}" ;;
+        local)   pp_via_local    "${raw_text}" "${system_prompt}" ;;
+        *)
+            notify "Whisper" "Unknown backend: ${backend}" "Basso"
+            return 1
+            ;;
+    esac
+}
+
+# ── Backend: GitHub Copilot API ──────────────────────────────────────────────
+
+pp_via_copilot() {
+    local raw_text="$1" system_prompt="$2"
+
     local token
     if ! token="$(resolve_copilot_token)"; then
         notify "Whisper" "Post-processing skipped — no Copilot token" ""
         return 0
     fi
 
-    local system_prompt
-    system_prompt="$(post_process_prompt "${mode}")"
-
-    # Build JSON payload — use python3 for safe escaping
     local payload
     payload="$(python3 -c "
 import json, sys
@@ -382,19 +409,16 @@ print(json.dumps({
         http_code="$(tail -n1 <<< "${response}")"
         response="$(sed '$ d' <<< "${response}")"
 
-        # Success
         if [ "${http_code}" = "200" ] && [ -n "${response}" ]; then
             break
         fi
 
-        # Token expired or revoked — no point retrying
         if [ "${http_code}" = "401" ]; then
             rm -f "${WHISPER_AUTH_FILE}"
             notify "Whisper" "Copilot token expired — sign in again via menubar" "Basso"
             return 1
         fi
 
-        # Rate limit (403) or empty response or other transient error — retry
         if [ "${attempt}" -lt "${max_retries}" ]; then
             sleep $((3 * attempt))
         fi
@@ -405,7 +429,6 @@ print(json.dumps({
         return 1
     fi
 
-    # Persistent 403 after retries — likely token issue, not just rate limit
     if [ "${http_code}" = "403" ]; then
         rm -f "${WHISPER_AUTH_FILE}"
         notify "Whisper" "Copilot token expired — sign in again via menubar" "Basso"
@@ -419,6 +442,322 @@ data = json.loads(sys.stdin.read())
 choices = data.get('choices', [])
 if choices:
     print(choices[0].get('message', {}).get('content', ''))
+" <<< "${response}" 2>/dev/null)"
+
+    if [ -n "${processed}" ]; then
+        printf '%s' "${processed}" > "${TEXT_FILE}"
+    else
+        notify "Whisper" "Post-processing failed — using raw transcript" "Basso"
+    fi
+}
+
+# ── Backend: Claude API (api.anthropic.com) ──────────────────────────────────
+
+pp_via_claude() {
+    local raw_text="$1" system_prompt="$2"
+
+    if [ -z "${WHISPER_CLAUDE_API_KEY}" ]; then
+        notify "Whisper" "Post-processing skipped — no Claude API key" ""
+        return 0
+    fi
+
+    local payload
+    payload="$(python3 -c "
+import json, sys
+print(json.dumps({
+    'model': sys.argv[3],
+    'max_tokens': 4096,
+    'system': sys.argv[1],
+    'messages': [
+        {'role': 'user', 'content': sys.argv[2]}
+    ]
+}))
+" "${system_prompt}" "${raw_text}" "${WHISPER_CLAUDE_MODEL}" 2>/dev/null)"
+
+    if [ -z "${payload}" ]; then
+        notify "Whisper" "Post-processing failed — payload error" "Basso"
+        return 1
+    fi
+
+    local response http_code
+    local max_retries=3
+    local attempt=0
+
+    while [ "${attempt}" -lt "${max_retries}" ]; do
+        attempt=$((attempt + 1))
+
+        response="$(curl -s --max-time 120 -w '\n%{http_code}' \
+            -H "x-api-key: ${WHISPER_CLAUDE_API_KEY}" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "${payload}" \
+            "https://api.anthropic.com/v1/messages" 2>/dev/null)"
+
+        http_code="$(tail -n1 <<< "${response}")"
+        response="$(sed '$ d' <<< "${response}")"
+
+        if [ "${http_code}" = "200" ] && [ -n "${response}" ]; then
+            break
+        fi
+
+        if [ "${http_code}" = "401" ]; then
+            notify "Whisper" "Claude API key invalid" "Basso"
+            return 1
+        fi
+
+        if [ "${attempt}" -lt "${max_retries}" ]; then
+            sleep $((3 * attempt))
+        fi
+    done
+
+    if [ -z "${response}" ]; then
+        notify "Whisper" "Post-processing failed — no Claude response after ${max_retries} attempts" "Basso"
+        return 1
+    fi
+
+    local processed
+    processed="$(python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+content = data.get('content', [])
+if content:
+    print(content[0].get('text', ''))
+" <<< "${response}" 2>/dev/null)"
+
+    if [ -n "${processed}" ]; then
+        printf '%s' "${processed}" > "${TEXT_FILE}"
+    else
+        notify "Whisper" "Post-processing failed — using raw transcript" "Basso"
+    fi
+}
+
+# ── Backend: Local model via llama-server (llama.cpp) ────────────────────────
+
+LLAMA_SERVER_PID_FILE="${WHISPER_TMPDIR}/llama-server.pid"
+
+local_server_running() {
+    if [ -f "${LLAMA_SERVER_PID_FILE}" ]; then
+        local pid
+        pid="$(cat "${LLAMA_SERVER_PID_FILE}" 2>/dev/null)"
+        if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "${LLAMA_SERVER_PID_FILE}"
+    fi
+    return 1
+}
+
+local_server_start() {
+    if local_server_running; then
+        printf 'already_running\n'
+        return 0
+    fi
+
+    local model_path="${WHISPER_LOCAL_MODEL}"
+    if [ -z "${model_path}" ] || [ ! -f "${model_path}" ]; then
+        printf 'error: no local model configured or file not found: %s\n' "${model_path}" >&2
+        return 1
+    fi
+
+    local llama_bin
+    llama_bin="$(find_bin llama-server)"
+    if [ -z "${llama_bin}" ]; then
+        printf 'error: llama-server not found (brew install llama.cpp)\n' >&2
+        return 1
+    fi
+
+    local port
+    port="$(printf '%s' "${WHISPER_LOCAL_URL}" | sed -E 's|.*:([0-9]+)$|\1|')"
+    port="${port:-8085}"
+
+    "${llama_bin}" \
+        -m "${model_path}" \
+        -ngl "${WHISPER_LOCAL_GPU_LAYERS}" \
+        -c "${WHISPER_LOCAL_CTX}" \
+        --port "${port}" \
+        --host 127.0.0.1 \
+        > "${WHISPER_TMPDIR}/llama-server.log" 2>&1 &
+
+    local pid=$!
+    printf '%s' "${pid}" > "${LLAMA_SERVER_PID_FILE}"
+
+    # Wait for server to become ready (up to 30s)
+    local attempts=0
+    while [ "${attempts}" -lt 60 ]; do
+        if curl -s --max-time 1 "${WHISPER_LOCAL_URL}/health" 2>/dev/null | grep -q 'ok'; then
+            printf 'started:%s\n' "${pid}"
+            return 0
+        fi
+        sleep 0.5
+        attempts=$((attempts + 1))
+        # Check if process died
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            rm -f "${LLAMA_SERVER_PID_FILE}"
+            printf 'error: llama-server exited unexpectedly\n' >&2
+            return 1
+        fi
+    done
+
+    # Timeout but process still alive — keep it
+    printf 'started:%s\n' "${pid}"
+}
+
+local_server_stop() {
+    if [ -f "${LLAMA_SERVER_PID_FILE}" ]; then
+        local pid
+        pid="$(cat "${LLAMA_SERVER_PID_FILE}" 2>/dev/null)"
+        if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+            kill "${pid}" 2>/dev/null
+            wait "${pid}" 2>/dev/null || true
+        fi
+        rm -f "${LLAMA_SERVER_PID_FILE}"
+    fi
+    printf 'stopped\n'
+}
+
+local_server_status() {
+    if local_server_running; then
+        local pid
+        pid="$(cat "${LLAMA_SERVER_PID_FILE}" 2>/dev/null)"
+        printf 'running:%s\n' "${pid}"
+
+        # Check health endpoint for loaded model info
+        local health
+        health="$(curl -s --max-time 2 "${WHISPER_LOCAL_URL}/health" 2>/dev/null || true)"
+        if printf '%s' "${health}" | grep -q 'ok'; then
+            printf 'healthy:yes\n'
+        else
+            printf 'healthy:no\n'
+        fi
+    else
+        printf 'stopped\n'
+    fi
+    printf 'model:%s\n' "${WHISPER_LOCAL_MODEL:-none}"
+    printf 'url:%s\n' "${WHISPER_LOCAL_URL}"
+}
+
+# ── Local LLM model management (Qwen3.5 GGUFs from Hugging Face) ────────────
+
+LOCAL_MODELS_DIR="${SCRIPT_DIR}/models"
+
+# Catalog: id|filename|size_label|huggingface_url
+LOCAL_MODEL_CATALOG="Qwen3.5-4B|Qwen3.5-4B-Q4_K_M.gguf|~3.4 GB|https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf
+Qwen3.5-9B|Qwen3.5-9B-Q4_K_M.gguf|~6.6 GB|https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf
+Qwen3.5-27B|Qwen3.5-27B-Q4_K_M.gguf|~17 GB|https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/resolve/main/Qwen3.5-27B-Q4_K_M.gguf"
+
+list_local_models() {
+    while IFS='|' read -r id filename size_label _url; do
+        local model_path="${LOCAL_MODELS_DIR}/${filename}"
+        if [ -f "${model_path}" ]; then
+            printf 'installed:%s|%s|%s\n' "${id}" "${filename}" "${size_label}"
+        else
+            printf 'available:%s|%s|%s\n' "${id}" "${filename}" "${size_label}"
+        fi
+    done <<< "${LOCAL_MODEL_CATALOG}"
+}
+
+download_local_model() {
+    local model_id="${2:-}"
+    if [ -z "${model_id}" ]; then
+        printf 'Usage: %s download-local-model <model-id>\n' "$0" >&2
+        printf 'Available: Qwen3.5-4B, Qwen3.5-9B, Qwen3.5-27B\n' >&2
+        exit 1
+    fi
+
+    # Look up model in catalog
+    local filename="" url=""
+    while IFS='|' read -r id fname _size hf_url; do
+        if [ "${id}" = "${model_id}" ]; then
+            filename="${fname}"
+            url="${hf_url}"
+            break
+        fi
+    done <<< "${LOCAL_MODEL_CATALOG}"
+
+    if [ -z "${filename}" ]; then
+        printf 'error:unknown model %s\n' "${model_id}" >&2
+        exit 1
+    fi
+
+    local model_path="${LOCAL_MODELS_DIR}/${filename}"
+    if [ -f "${model_path}" ]; then
+        printf 'already_exists\n'
+        exit 0
+    fi
+
+    mkdir -p "${LOCAL_MODELS_DIR}"
+    notify "Whisper" "Downloading ${model_id}..." ""
+    printf 'downloading:%s\n' "${filename}"
+
+    if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}" 2>&1; then
+        mv "${model_path}.part" "${model_path}"
+        printf 'done:%s\n' "${filename}"
+        notify "Whisper" "Model ${model_id} downloaded" "Glass"
+    else
+        rm -f "${model_path}.part"
+        printf 'failed:%s\n' "${filename}" >&2
+        notify "Whisper" "Download failed for ${model_id}" "Basso"
+        exit 1
+    fi
+}
+
+pp_via_local() {
+    local raw_text="$1" system_prompt="$2"
+
+    # Check if llama-server is reachable
+    if ! curl -s --max-time 2 "${WHISPER_LOCAL_URL}/health" 2>/dev/null | grep -q 'ok'; then
+        notify "Whisper" "Post-processing skipped — llama-server not running" "Basso"
+        return 0
+    fi
+
+    # Prepend /no_think to disable Qwen3.5 chain-of-thought mode
+    local user_content="/no_think
+${raw_text}"
+
+    local payload
+    payload="$(python3 -c "
+import json, sys
+print(json.dumps({
+    'messages': [
+        {'role': 'system', 'content': sys.argv[1]},
+        {'role': 'user', 'content': sys.argv[2]}
+    ],
+    'max_tokens': 4096,
+    'temperature': 0.2
+}))
+" "${system_prompt}" "${user_content}" 2>/dev/null)"
+
+    if [ -z "${payload}" ]; then
+        notify "Whisper" "Post-processing failed — payload error" "Basso"
+        return 1
+    fi
+
+    local response http_code
+    response="$(curl -s --max-time 60 -w '\n%{http_code}' \
+        -H "Content-Type: application/json" \
+        -d "${payload}" \
+        "${WHISPER_LOCAL_URL}/v1/chat/completions" 2>/dev/null)"
+
+    http_code="$(tail -n1 <<< "${response}")"
+    response="$(sed '$ d' <<< "${response}")"
+
+    if [ "${http_code}" != "200" ] || [ -z "${response}" ]; then
+        notify "Whisper" "Local model failed (HTTP ${http_code})" "Basso"
+        return 1
+    fi
+
+    # OpenAI-compatible response: choices[0].message.content
+    local processed
+    processed="$(python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+choices = data.get('choices', [])
+if choices:
+    text = choices[0].get('message', {}).get('content', '')
+    # Strip any thinking tags that might slip through
+    import re
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+    print(text)
 " <<< "${response}" 2>/dev/null)"
 
     if [ -n "${processed}" ]; then
@@ -729,6 +1068,9 @@ stop_recording() {
 
         if [ "${WHISPER_AUTO_PASTE}" = "1" ]; then
             paste_clipboard
+            if [ "${WHISPER_AUTO_ENTER}" = "1" ]; then
+                osascript -e 'tell application "System Events" to key code 36' >/dev/null 2>&1 || true
+            fi
         fi
 
         if [ "${#result}" -gt 80 ]; then
@@ -890,6 +1232,40 @@ download_model() {
     fi
 }
 
+check_update() {
+    local version_file="${SCRIPT_DIR}/VERSION"
+    local local_version
+    local_version="$(cat "${version_file}" 2>/dev/null | tr -d '[:space:]')"
+    if [ -z "${local_version}" ]; then
+        printf 'error: no local version\n' >&2
+        exit 1
+    fi
+
+    # Fetch latest refs from origin (quiet, no merge)
+    if ! git -C "${SCRIPT_DIR}" fetch origin --quiet 2>/dev/null; then
+        printf 'error: git fetch failed\n' >&2
+        exit 1
+    fi
+
+    local default_branch
+    default_branch="$(git -C "${SCRIPT_DIR}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo 'main')"
+
+    local remote_version
+    remote_version="$(git -C "${SCRIPT_DIR}" show "origin/${default_branch}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+    if [ -z "${remote_version}" ]; then
+        printf 'error: could not read remote VERSION\n' >&2
+        exit 1
+    fi
+
+    printf 'local_version: %s\n' "${local_version}"
+    printf 'remote_version: %s\n' "${remote_version}"
+    if [ "${local_version}" = "${remote_version}" ]; then
+        printf 'update_available: no\n'
+    else
+        printf 'update_available: yes\n'
+    fi
+}
+
 case "${ACTION}" in
     start)
         start_recording
@@ -918,8 +1294,29 @@ case "${ACTION}" in
     auth)
         copilot_device_flow
         ;;
+    check-update)
+        check_update
+        ;;
+    self-update)
+        # Run update.sh from same directory
+        exec "${SCRIPT_DIR}/update.sh"
+        ;;
+    local-server)
+        case "${2:-}" in
+            start)  local_server_start  ;;
+            stop)   local_server_stop   ;;
+            status) local_server_status ;;
+            *)      printf 'Usage: %s local-server start|stop|status\n' "$0" >&2; exit 1 ;;
+        esac
+        ;;
+    list-local-models)
+        list_local_models
+        ;;
+    download-local-model)
+        download_local_model "$@"
+        ;;
     *)
-        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|auth|status\n' "$0" >&2
+        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|list-local-models|download-local-model|auth|status|check-update|self-update|local-server\n' "$0" >&2
         exit 1
         ;;
 esac

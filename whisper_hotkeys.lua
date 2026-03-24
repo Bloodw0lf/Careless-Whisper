@@ -30,6 +30,7 @@ end
 
 local toggle_mods, toggle_key = parse_hotkey(read_conf("WHISPER_HOTKEY_TOGGLE", "shift,cmd,r"))
 local stop_mods,   stop_key   = parse_hotkey(read_conf("WHISPER_HOTKEY_STOP",   "shift,cmd,q"))
+local panel_mods,  panel_key  = parse_hotkey(read_conf("WHISPER_HOTKEY_PANEL",  "shift,cmd,w"))
 
 local status_item = hs.menubar.new()
 
@@ -40,6 +41,7 @@ end
 local script_dir  = whisper_script:match("(.+)/[^/]+$") or "."
 local model_dir   = script_dir .. "/models"
 local auth_file   = home .. "/.config/careless-whisper/auth.json"
+local whisper_webview = dofile(script_dir .. "/whisper_webview.lua")
 
 -- Check if Copilot auth token exists
 local function has_copilot_token()
@@ -115,6 +117,7 @@ local function set_indicator(state)
                 if recording_start and status_item then
                     local e = os.time() - recording_start
                     status_item:setTitle("● " .. format_duration(e))
+                    whisper_webview.pushState({state = "recording", elapsed = e})
                 end
             end)
         end
@@ -125,6 +128,8 @@ local function set_indicator(state)
         status_item:setTitle("○")
         status_item:setTooltip("Whisper: idle")
     end
+    local elapsed = recording_start and (os.time() - recording_start) or 0
+    whisper_webview.pushState({state = current_state, elapsed = elapsed})
 end
 
 local function update_indicator()
@@ -180,7 +185,10 @@ local function run_whisper(action)
     local task = hs.task.new(whisper_script, function()
         whisper_busy = false
         if whisper_busy_safety then whisper_busy_safety:stop(); whisper_busy_safety = nil end
-        hs.timer.doAfter(0.4, update_indicator)
+        hs.timer.doAfter(0.4, function()
+            update_indicator()
+            whisper_webview.pushHistory()
+        end)
         return false
     end, {action})
 
@@ -265,6 +273,7 @@ local function start_download_progress(model_name, part_path)
                 status_item:setTooltip("Downloading " .. display .. "…")
             end
         end
+        whisper_webview.pushModels()
     end)
 end
 
@@ -301,6 +310,7 @@ local function download_model(model_name)
     local task = hs.task.new(whisper_script, function(exit_code, std_out, _)
         download_in_progress[model_name] = nil
         stop_download_progress()
+        whisper_webview.pushModels()
         if exit_code == 0 then
             if std_out and std_out:match("already_exists") then
                 alert(display .. " already installed")
@@ -520,12 +530,225 @@ local function build_menu()
     return menu
 end
 
+-- ── Webview Panel Bridge ────────────────────────────────────────────────────
+
+local function get_state()
+    local elapsed = recording_start and (os.time() - recording_start) or 0
+    return { state = current_state, elapsed = elapsed }
+end
+
+local function get_download_progress()
+    local progress = {}
+    for model_name, _ in pairs(download_in_progress) do
+        local part_path = model_dir .. "/" .. model_name .. ".part"
+        local f = io.open(part_path, "r")
+        if f then
+            local size = f:seek("end")
+            f:close()
+            if size then
+                local mb = size / (1024 * 1024)
+                if mb >= 1024 then
+                    progress[model_name] = string.format("%.1f GB", mb / 1024)
+                else
+                    progress[model_name] = string.format("%.0f MB", mb)
+                end
+            end
+        else
+            progress[model_name] = "starting…"
+        end
+    end
+    return progress
+end
+
+-- ── Local LLM model management ──────────────────────────────────────────────
+
+local local_download_in_progress = {}
+
+local function list_local_models()
+    local installed = {}
+    local available = {}
+    local handle = io.popen(whisper_script .. " list-local-models 2>/dev/null")
+    if not handle then return installed, available end
+    for line in handle:lines() do
+        local status, rest = line:match("^(%w+):(.+)$")
+        if rest then
+            local id, filename, size = rest:match("^(.-)|(.-)|(.+)$")
+            if id and filename and size then
+                local entry = { id = id, filename = filename, size = size }
+                if status == "installed" then
+                    installed[#installed + 1] = entry
+                elseif status == "available" then
+                    available[#available + 1] = entry
+                end
+            end
+        end
+    end
+    handle:close()
+    return installed, available
+end
+
+local function get_local_download_progress()
+    local progress = {}
+    for model_id, filename in pairs(local_download_in_progress) do
+        local part_path = model_dir .. "/" .. filename .. ".part"
+        local f = io.open(part_path, "r")
+        if f then
+            local size = f:seek("end")
+            f:close()
+            if size then
+                local mb = size / (1024 * 1024)
+                if mb >= 1024 then
+                    progress[model_id] = string.format("%.1f GB", mb / 1024)
+                else
+                    progress[model_id] = string.format("%.0f MB", mb)
+                end
+            end
+        else
+            progress[model_id] = "starting…"
+        end
+    end
+    return progress
+end
+
+local function download_local_model(model_id)
+    if local_download_in_progress[model_id] then
+        alert("Already downloading " .. model_id)
+        return
+    end
+
+    -- Find filename from catalog
+    local _, avail = list_local_models()
+    local filename = nil
+    for _, m in ipairs(avail) do
+        if m.id == model_id then
+            filename = m.filename
+            break
+        end
+    end
+    if not filename then
+        alert(model_id .. " not found or already installed")
+        return
+    end
+
+    local_download_in_progress[model_id] = filename
+    alert("Downloading " .. model_id .. "…")
+
+    local part_path = model_dir .. "/" .. filename .. ".part"
+    start_download_progress(model_id, part_path)
+
+    local task = hs.task.new(whisper_script, function(exit_code, std_out, _)
+        local_download_in_progress[model_id] = nil
+        stop_download_progress()
+        whisper_webview.pushLocalModels()
+        whisper_webview.pushLocalServer()
+        if exit_code == 0 then
+            if std_out and std_out:match("already_exists") then
+                alert(model_id .. " already installed")
+            else
+                alert(model_id .. " ready ✓")
+            end
+        else
+            alert("Download failed: " .. model_id)
+        end
+    end, {"download-local-model", model_id})
+
+    if task then
+        task:start()
+    else
+        local_download_in_progress[model_id] = nil
+        stop_download_progress()
+        alert("Failed to start download")
+    end
+end
+
+local function select_local_model(filename)
+    local new_path = model_dir .. "/" .. filename
+    if not update_conf_value("WHISPER_LOCAL_MODEL", new_path) then
+        alert("Cannot update config file")
+        return
+    end
+    local display = filename:gsub("%.gguf$", "")
+    alert("Local model → " .. display)
+end
+
+whisper_webview.init({
+    whisper_script        = whisper_script,
+    script_dir            = script_dir,
+    read_conf             = read_conf,
+    run_whisper           = run_whisper,
+    update_conf_value     = update_conf_value,
+    set_active_model      = set_active_model,
+    download_model        = download_model,
+    list_available_models = list_available_models,
+    get_active_model      = get_active_model,
+    read_history          = read_history,
+    has_copilot_token     = has_copilot_token,
+    get_state             = get_state,
+    get_download_progress = get_download_progress,
+    list_local_models     = list_local_models,
+    get_local_download_progress = get_local_download_progress,
+    download_local_model  = download_local_model,
+    select_local_model    = select_local_model,
+    check_update          = function(callback)
+        local task = hs.task.new(whisper_script, function(exitCode, stdout, _)
+            if exitCode ~= 0 or not stdout then
+                callback({ available = false })
+                return
+            end
+            local local_v = stdout:match("local_version:%s*(%S+)")
+            local remote_v = stdout:match("remote_version:%s*(%S+)")
+            local avail = stdout:match("update_available:%s*(%S+)")
+            callback({
+                available = (avail == "yes"),
+                local_version = local_v or "?",
+                remote_version = remote_v or "?",
+            })
+        end, { "check-update" })
+        if task then task:start() else callback({ available = false }) end
+    end,
+    self_update           = function(callback)
+        local task = hs.task.new(script_dir .. "/update.sh", function(exitCode, stdout, stderr)
+            callback(exitCode == 0, (stdout or "") .. (stderr or ""))
+        end)
+        if task then task:start() else callback(false, "Failed to create task") end
+    end,
+    local_server_status   = function(callback)
+        local task = hs.task.new(whisper_script, function(exitCode, stdout, _)
+            if exitCode ~= 0 or not stdout then
+                callback({ running = false, healthy = false, model = "" })
+                return
+            end
+            local running = stdout:match("running:") ~= nil
+            local healthy = stdout:match("healthy:yes") ~= nil
+            local model = stdout:match("model:(%S+)") or ""
+            callback({ running = running, healthy = healthy, model = model })
+        end, { "local-server", "status" })
+        if task then task:start() else callback({ running = false, healthy = false, model = "" }) end
+    end,
+    local_server_start    = function(callback)
+        local task = hs.task.new(whisper_script, function(exitCode, stdout, stderr)
+            local ok = exitCode == 0
+            local msg = ok and "started" or ((stderr or ""):match("error: (.+)") or "start failed")
+            callback(ok, msg)
+        end, { "local-server", "start" })
+        if task then task:start() else callback(false, "Failed to create task") end
+    end,
+    local_server_stop     = function(callback)
+        local task = hs.task.new(whisper_script, function(_, _, _)
+            callback()
+        end, { "local-server", "stop" })
+        if task then task:start() else callback() end
+    end,
+})
+
+-- Menubar: click opens panel instead of dropdown
 if status_item then
-    status_item:setMenu(build_menu)
+    status_item:setClickCallback(function() whisper_webview.toggle() end)
 end
 
 hs.hotkey.bind(toggle_mods, toggle_key, function() run_whisper("toggle") end)
 hs.hotkey.bind(stop_mods,   stop_key,   function() run_whisper("stop")   end)
+hs.hotkey.bind(panel_mods,  panel_key,  function() whisper_webview.toggle() end)
 
 -- Audio device change watcher: auto-restart recording when input device changes
 local restart_in_progress = false

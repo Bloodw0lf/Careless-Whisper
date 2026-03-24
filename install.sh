@@ -78,7 +78,7 @@ echo
 
 # ── Permissions ──────────────────────────────────────────────────────────────
 
-chmod +x "${WHISPER_SCRIPT}"
+chmod +x "${WHISPER_SCRIPT}" "${ROOT_DIR}/update.sh"
 
 # ── Patch whisper_hotkeys.lua with correct paths ──────────────────────────────
 
@@ -181,18 +181,40 @@ WHISPER_AUTO_PASTE=1
 WHISPER_MAX_SECONDS=7200
 WHISPER_HOTKEY_TOGGLE="${HOTKEY_TOGGLE}"
 WHISPER_HOTKEY_STOP="${HOTKEY_STOP}"
+WHISPER_HOTKEY_PANEL="shift,cmd,w"
 WHISPER_NOTIFICATIONS=1
 WHISPER_SOUNDS=1
 WHISPER_POST_PROCESS=off
+# Optional auto-enter after paste (useful for LLM chats): WHISPER_AUTO_ENTER=1
 # Optional fixed device index: WHISPER_AUDIO_DEVICE_INDEX=1
 # Optional translate to English: WHISPER_TRANSLATE=1
 # Optional history size: WHISPER_HISTORY_MAX=10
+# Post-processing backend: copilot | claude | local
+# WHISPER_PP_BACKEND=copilot
+# Claude API key (for backend=claude): WHISPER_CLAUDE_API_KEY=sk-ant-...
+# Claude model: WHISPER_CLAUDE_MODEL=claude-sonnet-4-20250514
+# Local model (llama.cpp): WHISPER_LOCAL_MODEL=/path/to/model.gguf
+# Local llama-server URL: WHISPER_LOCAL_URL=http://127.0.0.1:8085
+# Local GPU layers: WHISPER_LOCAL_GPU_LAYERS=99
+# Local context size: WHISPER_LOCAL_CTX=8192
 EOFCONF
+    # If a local model was downloaded, write it into the fresh config
+    if [ -n "${LOCAL_MODEL_PATH}" ] && [ -f "${LOCAL_MODEL_PATH}" ]; then
+        printf 'WHISPER_LOCAL_MODEL="%s"\nWHISPER_PP_BACKEND=local\n' "${LOCAL_MODEL_PATH}" >> "${CONFIG_FILE}"
+    fi
     echo "==> Created config: ${CONFIG_FILE}"
 else
     # Update model path
     if [ -n "${SELECTED_MODEL}" ]; then
         sed -i '' "s|^WHISPER_MODEL_PATH=.*|WHISPER_MODEL_PATH=\"${SELECTED_MODEL}\"|" "${CONFIG_FILE}"
+    fi
+    # Update local model path if downloaded
+    if [ -n "${LOCAL_MODEL_PATH}" ] && [ -f "${LOCAL_MODEL_PATH}" ]; then
+        if grep -q "^WHISPER_LOCAL_MODEL=" "${CONFIG_FILE}"; then
+            sed -i '' "s|^WHISPER_LOCAL_MODEL=.*|WHISPER_LOCAL_MODEL=\"${LOCAL_MODEL_PATH}\"|" "${CONFIG_FILE}"
+        else
+            printf 'WHISPER_LOCAL_MODEL="%s"\n' "${LOCAL_MODEL_PATH}" >> "${CONFIG_FILE}"
+        fi
     fi
     # Update hotkeys — append if not present yet
     if grep -q "^WHISPER_HOTKEY_TOGGLE=" "${CONFIG_FILE}"; then
@@ -380,11 +402,59 @@ else
 fi
 echo
 
+# ── Local LLM model download (optional, for local post-processing) ───────────
+
+echo "==> Local AI post-processing (fully offline, via llama.cpp)"
+echo "    Requires: brew install llama.cpp"
+echo
+echo "    Download a Qwen3.5 model for local post-processing?"
+echo
+echo "    1) Qwen3.5-4B   (~3.4 GB, fast — 8 GB RAM)"
+echo "    2) Qwen3.5-9B   (~6.6 GB, balanced — 16 GB RAM)"
+echo "    3) Qwen3.5-27B  (~17 GB, best quality — 32 GB RAM)"
+echo "    4) Skip — I'll set up local AI later"
+echo
+read -rp "    Choice [4]: " LOCAL_MODEL_CHOICE
+LOCAL_MODEL_CHOICE="${LOCAL_MODEL_CHOICE:-4}"
+
+LOCAL_MODEL_ID=""
+LOCAL_MODEL_FILE=""
+case "${LOCAL_MODEL_CHOICE}" in
+    1) LOCAL_MODEL_ID="Qwen3.5-4B";  LOCAL_MODEL_FILE="Qwen3.5-4B-Q4_K_M.gguf" ;;
+    2) LOCAL_MODEL_ID="Qwen3.5-9B";  LOCAL_MODEL_FILE="Qwen3.5-9B-Q4_K_M.gguf" ;;
+    3) LOCAL_MODEL_ID="Qwen3.5-27B"; LOCAL_MODEL_FILE="Qwen3.5-27B-Q4_K_M.gguf" ;;
+    4) ;;
+    *) echo "    Invalid choice, skipping." ;;
+esac
+
+LOCAL_MODEL_PATH=""
+if [ -n "${LOCAL_MODEL_ID}" ]; then
+    LOCAL_MODEL_PATH="${MODEL_DIR}/${LOCAL_MODEL_FILE}"
+    if [ -f "${LOCAL_MODEL_PATH}" ]; then
+        echo "    ${LOCAL_MODEL_FILE} already exists, skipping download."
+    else
+        LOCAL_MODEL_URL="https://huggingface.co/unsloth/${LOCAL_MODEL_ID}-GGUF/resolve/main/${LOCAL_MODEL_FILE}"
+        echo "==> Downloading ${LOCAL_MODEL_FILE} (this may take a while)..."
+        mkdir -p "${MODEL_DIR}"
+        if curl -L --fail --progress-bar --output "${LOCAL_MODEL_PATH}.part" "${LOCAL_MODEL_URL}"; then
+            mv "${LOCAL_MODEL_PATH}.part" "${LOCAL_MODEL_PATH}"
+            echo "    Downloaded: ${LOCAL_MODEL_PATH}"
+        else
+            rm -f "${LOCAL_MODEL_PATH}.part"
+            echo "    Download failed. You can retry later via the panel or:"
+            echo "    ./whisper.sh download-local-model ${LOCAL_MODEL_ID}"
+            LOCAL_MODEL_PATH=""
+        fi
+    fi
+fi
+echo
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo "==> Install complete."
 echo
 echo "    Model:  $(basename "${SELECTED_MODEL:-none selected}")"
+echo "    Local:  $(basename "${LOCAL_MODEL_PATH:-none}")"
 echo "    Toggle: ${HOTKEY_TOGGLE}"
 echo "    Stop:   ${HOTKEY_STOP}"
 echo
