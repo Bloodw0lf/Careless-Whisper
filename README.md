@@ -14,12 +14,13 @@ cd Careless-Whisper
 
 The installer handles everything automatically:
 
-1. Installs `ffmpeg` and `whisper-cpp` via Homebrew (if missing)
+1. Installs `ffmpeg`, `whisper-cpp`, and `llama.cpp` via Homebrew (if missing)
 2. Offers to install Hammerspoon via `brew install --cask`
-3. Downloads a whisper model (~800 MB) if none exist yet
-4. Creates `whisper-stt.conf` with correct paths
-5. Wires up `~/.hammerspoon/init.lua`
-6. Launches Hammerspoon and reloads the config
+3. Interactive arrow-key model selection (whisper + local LLM)
+4. GitHub Copilot OAuth authentication (for AI post-processing)
+5. Creates `whisper-stt.conf` with correct paths
+6. Wires up `~/.hammerspoon/init.lua`
+7. Launches Hammerspoon and reloads the config
 
 After install: press **⇧⌘R** to start recording, press again to transcribe and paste.
 
@@ -104,7 +105,7 @@ Get an API key at [console.anthropic.com](https://console.anthropic.com/).
 
 #### Local (llama.cpp)
 
-Fully offline processing via [llama.cpp](https://github.com/ggerganov/llama.cpp). Runs a GGUF model as a persistent local server with native Metal acceleration on Apple Silicon. No auth, no cloud, no rate limits.
+Fully offline processing via [llama.cpp](https://github.com/ggerganov/llama.cpp). Runs on-demand — the server starts automatically before post-processing and shuts down after, freeing GPU RAM. Native Metal acceleration on Apple Silicon. No auth, no cloud, no rate limits.
 
 **Install:**
 
@@ -112,13 +113,13 @@ Fully offline processing via [llama.cpp](https://github.com/ggerganov/llama.cpp)
 brew install llama.cpp
 ```
 
-**Download a model** (Qwen2.5-Instruct recommended — Apache 2.0, no reasoning overhead):
+**Download a model:**
 
-| Tier     | Model       | Size (Q4_K_M) | Use case                            |
-| -------- | ----------- | ------------- | ----------------------------------- |
-| Fast     | Qwen2.5-3B  | ~2 GB         | clean, message — filler removal     |
-| Balanced | Qwen2.5-7B  | ~4.5 GB       | All modes including email/prompt    |
-| Quality  | Qwen2.5-14B | ~9 GB         | Longer transcripts, polished output |
+| Tier     | Model        | Size (Q4_K_M) | Use case                            |
+| -------- | ------------ | ------------- | ----------------------------------- |
+| Fast     | Llama-3.2-3B | ~1.9 GB       | clean, message — filler removal     |
+| Balanced | Qwen2.5-7B   | ~4.5 GB       | All modes including email/prompt    |
+| Quality  | Qwen2.5-14B  | ~9 GB         | Longer transcripts, polished output |
 
 Models can be downloaded automatically via:
 
@@ -126,7 +127,7 @@ Models can be downloaded automatically via:
 - **Panel**: AI Backend → Local → Download section
 - **CLI**: `./whisper.sh download-local-model Qwen2.5-7B`
 
-Or download GGUFs manually from [bartowski/Qwen2.5-\*-Instruct-GGUF](https://huggingface.co/bartowski) on Hugging Face (use Q4_K_M quantization).
+Or download GGUFs manually from [bartowski](https://huggingface.co/bartowski) on Hugging Face (use Q4_K_M quantization).
 
 **Configure:**
 
@@ -136,15 +137,7 @@ WHISPER_LOCAL_MODEL=/path/to/Qwen2.5-7B-Instruct-Q4_K_M.gguf
 WHISPER_LOCAL_URL=http://127.0.0.1:8085
 ```
 
-**Start/stop** the server from the settings panel (AI Backend → Local → Start/Stop) or manually:
-
-```bash
-./whisper.sh local-server start
-./whisper.sh local-server stop
-./whisper.sh local-server status
-```
-
-The server runs on port 8085 with all layers offloaded to GPU (`-ngl 99`) and 8K context. Adjust via `WHISPER_LOCAL_GPU_LAYERS` and `WHISPER_LOCAL_CTX`.
+The server runs on-demand (starts/stops automatically with each transcription) on port 8085, with all layers offloaded to GPU (`-ngl 99`) and 8K context. Adjust via `WHISPER_LOCAL_GPU_LAYERS` and `WHISPER_LOCAL_CTX`.
 
 ## Models
 
