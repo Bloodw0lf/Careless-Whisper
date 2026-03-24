@@ -7,7 +7,7 @@ Uses [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for transcription a
 ## Quick Start
 
 ```bash
-git clone https://wwwin-github.cisco.com/bpleger/Careless-Whisper.git
+git clone https://github.com/Bloodw0lf/Careless-Whisper.git
 cd Careless-Whisper
 ./install.sh
 ```
