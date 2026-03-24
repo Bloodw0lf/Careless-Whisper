@@ -9,6 +9,87 @@
 
 set -euo pipefail
 
+# ── Interactive arrow-key menu ───────────────────────────────────────────────
+# Usage: select_menu RESULT_VAR default_index "label1" "label2" ...
+#   - Navigate with ↑/↓ arrow keys, confirm with Enter
+#   - default_index is 0-based
+#   - Result (0-based index) is stored in the variable named by RESULT_VAR
+
+select_menu() {
+    local _result_var="$1"; shift
+    local selected="$1"; shift
+    local options=("$@")
+    local count="${#options[@]}"
+
+    # Save terminal settings and enable raw mode
+    local saved_tty
+    saved_tty="$(stty -g)"
+    stty -echo -icanon min 1
+
+    # Hide cursor
+    printf '\033[?25l'
+
+    # Draw all options
+    local i
+    for i in "${!options[@]}"; do
+        if [ "$i" -eq "${selected}" ]; then
+            printf '  \033[1;36m❯ %s\033[0m\n' "${options[$i]}"
+        else
+            printf '    %s\n' "${options[$i]}"
+        fi
+    done
+
+    while true; do
+        # Read a single byte
+        local key
+        key="$(dd bs=1 count=1 2>/dev/null)"
+
+        if [ "${key}" = $'\x1b' ]; then
+            # Escape sequence — read next two bytes
+            local seq1 seq2
+            seq1="$(dd bs=1 count=1 2>/dev/null)"
+            seq2="$(dd bs=1 count=1 2>/dev/null)"
+            if [ "${seq1}" = "[" ]; then
+                case "${seq2}" in
+                    A) # Up arrow
+                        if [ "${selected}" -gt 0 ]; then
+                            selected=$((selected - 1))
+                        fi
+                        ;;
+                    B) # Down arrow
+                        if [ "${selected}" -lt $((count - 1)) ]; then
+                            selected=$((selected + 1))
+                        fi
+                        ;;
+                esac
+            fi
+        elif [ "${key}" = "" ]; then
+            # Enter pressed
+            break
+        fi
+
+        # Redraw: move cursor up, then reprint
+        printf '\033[%dA' "${count}"
+        for i in "${!options[@]}"; do
+            printf '\r\033[K'
+            if [ "$i" -eq "${selected}" ]; then
+                printf '  \033[1;36m❯ %s\033[0m\n' "${options[$i]}"
+            else
+                printf '    %s\n' "${options[$i]}"
+            fi
+        done
+    done
+
+    # Show cursor, restore terminal
+    printf '\033[?25h'
+    stty "${saved_tty}"
+
+    # Print final selection
+    printf '\r\033[K    \033[32m✓ %s\033[0m\n' "${options[$selected]}"
+
+    eval "${_result_var}=${selected}"
+}
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RELATIVE_PATH="${ROOT_DIR#${HOME}/}"
 
@@ -61,6 +142,7 @@ fi
 
 install_brew_pkg ffmpeg ffmpeg
 install_brew_pkg whisper-cli whisper-cpp
+install_brew_pkg llama-server llama.cpp
 
 if [ ! -d "/Applications/Hammerspoon.app" ] && [ ! -d "${HOME}/Applications/Hammerspoon.app" ]; then
     echo "WARN:  Hammerspoon not found."
@@ -72,8 +154,9 @@ if [ ! -d "/Applications/Hammerspoon.app" ] && [ ! -d "${HOME}/Applications/Hamm
     fi
 fi
 
-echo "    ffmpeg:      $(command -v ffmpeg)"
-echo "    whisper-cli: $(command -v whisper-cli)"
+echo "    ffmpeg:       $(command -v ffmpeg)"
+echo "    whisper-cli:  $(command -v whisper-cli)"
+echo "    llama-server: $(command -v llama-server)"
 echo
 
 # ── Permissions ──────────────────────────────────────────────────────────────
@@ -101,29 +184,19 @@ SELECTED_MODEL=""
 if [ "${#EXISTING_MODELS[@]}" -eq 0 ]; then
     echo "==> No models found. Choose one to download:"
     echo
-    echo "    1) ggml-large-v3-turbo  (~800 MB, recommended)"
-    echo "       Fastest large model. Best speed/quality ratio."
-    echo "       Multilingual, auto-detect. Ideal for daily use."
+
+    select_menu MODEL_CHOICE 0 \
+        "ggml-large-v3-turbo  (~800 MB)  — Fastest large, best speed/quality ratio" \
+        "ggml-large-v3        (~1.5 GB)  — Highest quality, slower transcription" \
+        "ggml-medium          (~1.5 GB)  — Good balance, all languages" \
+        "Skip — I'll add a model manually"
     echo
-    echo "    2) ggml-large-v3        (~1.5 GB, highest quality)"
-    echo "       Most accurate model. Slower transcription."
-    echo "       Best for long recordings or noisy environments."
-    echo
-    echo "    3) ggml-medium          (~1.5 GB, multilingual)"
-    echo "       Good balance. Supports all languages."
-    echo "       Smaller than large-v3 in accuracy, similar size."
-    echo
-    echo "    4) Skip — I'll add a model manually"
-    echo
-    read -rp "    Choice [1]: " MODEL_CHOICE
-    MODEL_CHOICE="${MODEL_CHOICE:-1}"
 
     case "${MODEL_CHOICE}" in
-        1) MODEL_NAME="ggml-large-v3-turbo" ;;
-        2) MODEL_NAME="ggml-large-v3"       ;;
-        3) MODEL_NAME="ggml-medium"         ;;
-        4) MODEL_NAME=""                    ;;
-        *) MODEL_NAME="ggml-large-v3-turbo" ; echo "    Invalid choice, defaulting to ggml-large-v3-turbo" ;;
+        0) MODEL_NAME="ggml-large-v3-turbo" ;;
+        1) MODEL_NAME="ggml-large-v3"       ;;
+        2) MODEL_NAME="ggml-medium"         ;;
+        3) MODEL_NAME=""                    ;;
     esac
 
     if [ -n "${MODEL_NAME}" ]; then
@@ -136,20 +209,15 @@ if [ "${#EXISTING_MODELS[@]}" -eq 0 ]; then
     fi
 else
     echo "==> Models found — choose active model:"
-    for i in "${!EXISTING_MODELS[@]}"; do
-        echo "    $((i+1))) ${EXISTING_MODELS[$i]}"
-    done
     echo
-    read -rp "    Choice [1]: " MODEL_CHOICE
-    MODEL_CHOICE="${MODEL_CHOICE:-1}"
 
-    if [[ "${MODEL_CHOICE}" =~ ^[0-9]+$ ]] \
-        && [ "${MODEL_CHOICE}" -ge 1 ] \
-        && [ "${MODEL_CHOICE}" -le "${#EXISTING_MODELS[@]}" ]; then
-        SELECTED_MODEL="${MODEL_DIR}/${EXISTING_MODELS[$((MODEL_CHOICE-1))]}"
+    select_menu MODEL_CHOICE 0 "${EXISTING_MODELS[@]}"
+    echo
+
+    if [ "${MODEL_CHOICE}" -ge 0 ] && [ "${MODEL_CHOICE}" -lt "${#EXISTING_MODELS[@]}" ]; then
+        SELECTED_MODEL="${MODEL_DIR}/${EXISTING_MODELS[${MODEL_CHOICE}]}"
     else
         SELECTED_MODEL="${MODEL_DIR}/${EXISTING_MODELS[0]}"
-        echo "    Invalid choice, using ${EXISTING_MODELS[0]}"
     fi
 fi
 echo
@@ -165,6 +233,9 @@ read -rp "    Stop immediately    [shift,cmd,q]: " HOTKEY_STOP
 HOTKEY_TOGGLE="${HOTKEY_TOGGLE:-shift,cmd,r}"
 HOTKEY_STOP="${HOTKEY_STOP:-shift,cmd,q}"
 echo
+
+# Initialise LOCAL_MODEL_PATH (set later by local model download section)
+LOCAL_MODEL_PATH=""
 
 # ── Config file ──────────────────────────────────────────────────────────────
 
@@ -405,25 +476,25 @@ echo
 # ── Local LLM model download (optional, for local post-processing) ───────────
 
 echo "==> Local AI post-processing (fully offline, via llama.cpp)"
-echo "    Requires: brew install llama.cpp"
 echo
-echo "    Download a Qwen3.5 model for local post-processing?"
+select_menu LOCAL_MODEL_CHOICE 1 \
+    "Llama-3.2-3B  (~1.9 GB)  — Fast, 8 GB RAM" \
+    "Qwen2.5-7B    (~4.5 GB)  — Balanced, 16 GB RAM  ← recommended" \
+    "Qwen2.5-14B   (~9 GB)    — Best quality, 32 GB RAM" \
+    "Skip — I'll set up local AI later"
 echo
-echo "    1) Qwen3.5-4B   (~3.4 GB, fast — 8 GB RAM)"
-echo "    2) Qwen3.5-9B   (~6.6 GB, balanced — 16 GB RAM)"
-echo "    3) Qwen3.5-27B  (~17 GB, best quality — 32 GB RAM)"
-echo "    4) Skip — I'll set up local AI later"
-echo
-read -rp "    Choice [4]: " LOCAL_MODEL_CHOICE
-LOCAL_MODEL_CHOICE="${LOCAL_MODEL_CHOICE:-4}"
 
 LOCAL_MODEL_ID=""
 LOCAL_MODEL_FILE=""
+LOCAL_MODEL_URL=""
 case "${LOCAL_MODEL_CHOICE}" in
-    1) LOCAL_MODEL_ID="Qwen3.5-4B";  LOCAL_MODEL_FILE="Qwen3.5-4B-Q4_K_M.gguf" ;;
-    2) LOCAL_MODEL_ID="Qwen3.5-9B";  LOCAL_MODEL_FILE="Qwen3.5-9B-Q4_K_M.gguf" ;;
-    3) LOCAL_MODEL_ID="Qwen3.5-27B"; LOCAL_MODEL_FILE="Qwen3.5-27B-Q4_K_M.gguf" ;;
-    4) ;;
+    0) LOCAL_MODEL_ID="Llama-3.2-3B";  LOCAL_MODEL_FILE="Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+       LOCAL_MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf" ;;
+    1) LOCAL_MODEL_ID="Qwen2.5-7B";  LOCAL_MODEL_FILE="Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+       LOCAL_MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf" ;;
+    2) LOCAL_MODEL_ID="Qwen2.5-14B"; LOCAL_MODEL_FILE="Qwen2.5-14B-Instruct-Q4_K_M.gguf"
+       LOCAL_MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-Q4_K_M.gguf" ;;
+    3) ;;
     *) echo "    Invalid choice, skipping." ;;
 esac
 
@@ -433,7 +504,6 @@ if [ -n "${LOCAL_MODEL_ID}" ]; then
     if [ -f "${LOCAL_MODEL_PATH}" ]; then
         echo "    ${LOCAL_MODEL_FILE} already exists, skipping download."
     else
-        LOCAL_MODEL_URL="https://huggingface.co/unsloth/${LOCAL_MODEL_ID}-GGUF/resolve/main/${LOCAL_MODEL_FILE}"
         echo "==> Downloading ${LOCAL_MODEL_FILE} (this may take a while)..."
         mkdir -p "${MODEL_DIR}"
         if curl -L --fail --progress-bar --output "${LOCAL_MODEL_PATH}.part" "${LOCAL_MODEL_URL}"; then

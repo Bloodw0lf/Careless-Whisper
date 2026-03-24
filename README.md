@@ -112,27 +112,27 @@ Fully offline processing via [llama.cpp](https://github.com/ggerganov/llama.cpp)
 brew install llama.cpp
 ```
 
-**Download a model** (Qwen3.5 recommended — Apache 2.0, 201 languages, native DE/EN):
+**Download a model** (Qwen2.5-Instruct recommended — Apache 2.0, no reasoning overhead):
 
 | Tier     | Model       | Size (Q4_K_M) | Use case                            |
 | -------- | ----------- | ------------- | ----------------------------------- |
-| Fast     | Qwen3.5-4B  | ~3.4 GB       | clean, message — filler removal     |
-| Balanced | Qwen3.5-9B  | ~6.6 GB       | All modes including email/prompt    |
-| Quality  | Qwen3.5-27B | ~17 GB        | Longer transcripts, polished output |
+| Fast     | Qwen2.5-3B  | ~2 GB         | clean, message — filler removal     |
+| Balanced | Qwen2.5-7B  | ~4.5 GB       | All modes including email/prompt    |
+| Quality  | Qwen2.5-14B | ~9 GB         | Longer transcripts, polished output |
 
 Models can be downloaded automatically via:
 
-- **Install script**: `./install.sh` offers interactive local model selection
+- **Install script**: `./install.sh` offers interactive local model selection (default: 7B)
 - **Panel**: AI Backend → Local → Download section
-- **CLI**: `./whisper.sh download-local-model Qwen3.5-9B`
+- **CLI**: `./whisper.sh download-local-model Qwen2.5-7B`
 
-Or download GGUFs manually from [unsloth/Qwen3.5-\*-GGUF](https://huggingface.co/unsloth) on Hugging Face (use Q4_K_M quantization).
+Or download GGUFs manually from [bartowski/Qwen2.5-\*-Instruct-GGUF](https://huggingface.co/bartowski) on Hugging Face (use Q4_K_M quantization).
 
 **Configure:**
 
 ```
 WHISPER_PP_BACKEND=local
-WHISPER_LOCAL_MODEL=/path/to/Qwen3.5-9B-Q4_K_M.gguf
+WHISPER_LOCAL_MODEL=/path/to/Qwen2.5-7B-Instruct-Q4_K_M.gguf
 WHISPER_LOCAL_URL=http://127.0.0.1:8085
 ```
 

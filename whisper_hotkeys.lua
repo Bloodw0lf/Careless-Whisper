@@ -255,7 +255,7 @@ local function stop_download_progress()
     end
 end
 
-local function start_download_progress(model_name, part_path)
+local function start_download_progress(model_name, part_path, kind)
     stop_download_progress()
     local display = model_name:gsub("^ggml%-", ""):gsub("%.bin$", "")
     download_progress_timer = hs.timer.doEvery(1.5, function()
@@ -273,7 +273,11 @@ local function start_download_progress(model_name, part_path)
                 status_item:setTooltip("Downloading " .. display .. "…")
             end
         end
-        whisper_webview.pushModels()
+        if kind == "local" then
+            whisper_webview.pushLocalModels()
+        else
+            whisper_webview.pushModels()
+        end
     end)
 end
 
@@ -634,7 +638,7 @@ local function download_local_model(model_id)
     alert("Downloading " .. model_id .. "…")
 
     local part_path = model_dir .. "/" .. filename .. ".part"
-    start_download_progress(model_id, part_path)
+    start_download_progress(model_id, part_path, "local")
 
     local task = hs.task.new(whisper_script, function(exit_code, std_out, _)
         local_download_in_progress[model_id] = nil

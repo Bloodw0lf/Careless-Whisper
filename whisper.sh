@@ -52,6 +52,9 @@ WHISPER_HOTKEY_TOGGLE="${WHISPER_HOTKEY_TOGGLE:-shift,cmd,r}"
 # - WHISPER_AUDIO_DEVICE=<n> uses AVFoundation index
 WHISPER_AUDIO_DEVICE="${WHISPER_AUDIO_DEVICE:-${WHISPER_AUDIO_DEVICE_INDEX:-default}}"
 
+# Developer option: append timing breakdown to pasted text
+WHISPER_DEV_TIMINGS="${WHISPER_DEV_TIMINGS:-0}"
+
 # Post-processing mode: off | clean | message | email | prompt | prompt-pro
 WHISPER_POST_PROCESS="${WHISPER_POST_PROCESS:-off}"
 # Post-processing backend: copilot | claude | local
@@ -570,10 +573,14 @@ local_server_start() {
     port="$(printf '%s' "${WHISPER_LOCAL_URL}" | sed -E 's|.*:([0-9]+)$|\1|')"
     port="${port:-8085}"
 
+    # Ensure a valid working directory (llama-server calls getcwd on init)
+    cd "${SCRIPT_DIR}" 2>/dev/null || cd /tmp
+
     "${llama_bin}" \
         -m "${model_path}" \
         -ngl "${WHISPER_LOCAL_GPU_LAYERS}" \
         -c "${WHISPER_LOCAL_CTX}" \
+        -np 1 \
         --port "${port}" \
         --host 127.0.0.1 \
         > "${WHISPER_TMPDIR}/llama-server.log" 2>&1 &
@@ -636,14 +643,14 @@ local_server_status() {
     printf 'url:%s\n' "${WHISPER_LOCAL_URL}"
 }
 
-# ── Local LLM model management (Qwen3.5 GGUFs from Hugging Face) ────────────
+# ── Local LLM model management (GGUFs from Hugging Face) ────────────────────
 
 LOCAL_MODELS_DIR="${SCRIPT_DIR}/models"
 
 # Catalog: id|filename|size_label|huggingface_url
-LOCAL_MODEL_CATALOG="Qwen3.5-4B|Qwen3.5-4B-Q4_K_M.gguf|~3.4 GB|https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf
-Qwen3.5-9B|Qwen3.5-9B-Q4_K_M.gguf|~6.6 GB|https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf
-Qwen3.5-27B|Qwen3.5-27B-Q4_K_M.gguf|~17 GB|https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/resolve/main/Qwen3.5-27B-Q4_K_M.gguf"
+LOCAL_MODEL_CATALOG="Llama-3.2-3B|Llama-3.2-3B-Instruct-Q4_K_M.gguf|~1.9 GB|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf
+Qwen2.5-7B|Qwen2.5-7B-Instruct-Q4_K_M.gguf|~4.5 GB|https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+Qwen2.5-14B|Qwen2.5-14B-Instruct-Q4_K_M.gguf|~9 GB|https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-Q4_K_M.gguf"
 
 list_local_models() {
     while IFS='|' read -r id filename size_label _url; do
@@ -660,7 +667,7 @@ download_local_model() {
     local model_id="${2:-}"
     if [ -z "${model_id}" ]; then
         printf 'Usage: %s download-local-model <model-id>\n' "$0" >&2
-        printf 'Available: Qwen3.5-4B, Qwen3.5-9B, Qwen3.5-27B\n' >&2
+        printf 'Available: Qwen2.5-3B, Qwen2.5-7B, Qwen2.5-14B\n' >&2
         exit 1
     fi
 
@@ -704,15 +711,16 @@ download_local_model() {
 pp_via_local() {
     local raw_text="$1" system_prompt="$2"
 
-    # Check if llama-server is reachable
+    # Auto-start llama-server if not running
     if ! curl -s --max-time 2 "${WHISPER_LOCAL_URL}/health" 2>/dev/null | grep -q 'ok'; then
-        notify "Whisper" "Post-processing skipped — llama-server not running" "Basso"
-        return 0
+        local_server_start >/dev/null 2>&1
+        if ! curl -s --max-time 2 "${WHISPER_LOCAL_URL}/health" 2>/dev/null | grep -q 'ok'; then
+            notify "Whisper" "Post-processing skipped — llama-server failed to start" "Basso"
+            return 0
+        fi
     fi
 
-    # Prepend /no_think to disable Qwen3.5 chain-of-thought mode
-    local user_content="/no_think
-${raw_text}"
+    local user_content="${raw_text}"
 
     local payload
     payload="$(python3 -c "
@@ -722,7 +730,7 @@ print(json.dumps({
         {'role': 'system', 'content': sys.argv[1]},
         {'role': 'user', 'content': sys.argv[2]}
     ],
-    'max_tokens': 4096,
+    'max_tokens': 1024,
     'temperature': 0.2
 }))
 " "${system_prompt}" "${user_content}" 2>/dev/null)"
@@ -733,7 +741,7 @@ print(json.dumps({
     fi
 
     local response http_code
-    response="$(curl -s --max-time 60 -w '\n%{http_code}' \
+    response="$(curl -s --max-time 120 -w '\n%{http_code}' \
         -H "Content-Type: application/json" \
         -d "${payload}" \
         "${WHISPER_LOCAL_URL}/v1/chat/completions" 2>/dev/null)"
@@ -765,6 +773,134 @@ if choices:
     else
         notify "Whisper" "Post-processing failed — using raw transcript" "Basso"
     fi
+
+    # Shutdown server after use to free GPU RAM
+    local_server_stop >/dev/null 2>&1
+}
+
+# ── DEV: Benchmark all installed local models ────────────────────────────────
+
+benchmark_local_models() {
+    local raw_text="$1" system_prompt="$2"
+
+    # Collect installed model paths
+    local -a model_ids=() model_files=()
+    while IFS='|' read -r id filename _size _url; do
+        local model_path="${LOCAL_MODELS_DIR}/${filename}"
+        if [ -f "${model_path}" ]; then
+            model_ids+=("${id}")
+            model_files+=("${model_path}")
+        fi
+    done <<< "${LOCAL_MODEL_CATALOG}"
+
+    if [ "${#model_ids[@]}" -eq 0 ]; then
+        notify "Whisper" "Benchmark: no local models installed" "Basso"
+        return 1
+    fi
+
+    # Build JSON payload once (same input for all models)
+    local payload
+    payload="$(python3 -c "
+import json, sys
+print(json.dumps({
+    'messages': [
+        {'role': 'system', 'content': sys.argv[1]},
+        {'role': 'user', 'content': sys.argv[2]}
+    ],
+    'max_tokens': 4096,
+    'temperature': 0.2
+}))
+" "${system_prompt}" "${raw_text}" 2>/dev/null)"
+
+    if [ -z "${payload}" ]; then
+        notify "Whisper" "Benchmark: payload error" "Basso"
+        return 1
+    fi
+
+    local saved_model="${WHISPER_LOCAL_MODEL}"
+    local output=""
+
+    for i in "${!model_ids[@]}"; do
+        local mid="${model_ids[$i]}"
+        local mfile="${model_files[$i]}"
+
+        notify "Whisper" "Benchmark: ${mid} ($(( i + 1 ))/${#model_ids[@]})..." ""
+
+        # Stop any running server
+        local_server_stop >/dev/null 2>&1
+        sleep 0.5
+
+        # Start server with this model
+        WHISPER_LOCAL_MODEL="${mfile}"
+        local ts_start ts_end
+        ts_start="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+
+        local_server_start >/dev/null 2>&1
+        if ! curl -s --max-time 2 "${WHISPER_LOCAL_URL}/health" 2>/dev/null | grep -q 'ok'; then
+            output="${output}\n\n── ${mid} (FAILED: server start) ──\n[Server konnte nicht gestartet werden]"
+            continue
+        fi
+
+        # Send request
+        local response http_code
+        response="$(curl -s --max-time 120 -w '\n%{http_code}' \
+            -H "Content-Type: application/json" \
+            -d "${payload}" \
+            "${WHISPER_LOCAL_URL}/v1/chat/completions" 2>/dev/null)"
+
+        ts_end="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+
+        http_code="$(tail -n1 <<< "${response}")"
+        response="$(sed '$ d' <<< "${response}")"
+
+        # Stop server immediately
+        local_server_stop >/dev/null 2>&1
+
+        if [ "${http_code}" != "200" ] || [ -z "${response}" ]; then
+            output="${output}\n\n── ${mid} (FAILED: HTTP ${http_code}) ──\n[Keine Antwort]"
+            continue
+        fi
+
+        local processed
+        processed="$(python3 -c "
+import json, sys, re
+data = json.loads(sys.stdin.read())
+choices = data.get('choices', [])
+if choices:
+    msg = choices[0].get('message', {})
+    text = msg.get('content', '') or ''
+    # Strip thinking tags
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+    if cleaned:
+        print(cleaned)
+    elif text.strip():
+        print(text.strip())
+    else:
+        # Reasoning models: content in reasoning_content field
+        rc = msg.get('reasoning_content', '') or ''
+        # Extract actual answer after reasoning (last paragraph)
+        parts = rc.strip().split('\n\n')
+        # Try to find a clean result line
+        for p in reversed(parts):
+            p = p.strip()
+            if p and not p.startswith('*') and not p.startswith('#') and len(p) > 10:
+                print('[reasoning] ' + p)
+                break
+        else:
+            print('[reasoning model - no usable output]')
+" <<< "${response}" 2>/dev/null)"
+
+        local duration
+        duration="$(python3 -c "print(f'{${ts_end}-${ts_start}:.1f}')" 2>/dev/null)"
+
+        output="${output}\n\n── ${mid} (${duration}s) ──\n${processed}"
+    done
+
+    # Restore original model
+    WHISPER_LOCAL_MODEL="${saved_model}"
+
+    # Write all results to text file
+    printf '%b' "${output}" > "${TEXT_FILE}"
 }
 
 notify() {
@@ -1029,6 +1165,9 @@ stop_recording() {
 
     notify "Whisper" "Transcribing..." ""
 
+    local _ts_transcribe_start
+    _ts_transcribe_start="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+
     local -a cmd
     cmd=("${WHISPER_BIN}" -m "${MODEL}" --no-prints -l "${WHISPER_LANGUAGE}")
     if [ "${WHISPER_TRANSLATE}" = "1" ]; then
@@ -1045,14 +1184,52 @@ stop_recording() {
     fi
     rm -f "${TRANSCRIBING_FILE}"
 
+    local _ts_transcribe_end
+    _ts_transcribe_end="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+
     trim_text_file
 
+    local _ts_pp_start="" _ts_pp_end=""
+    local _did_benchmark=0
     # Post-process via Copilot API if enabled
     if [ "${WHISPER_POST_PROCESS}" != "off" ] && [ -n "${WHISPER_POST_PROCESS}" ]; then
         touch "${POSTPROCESSING_FILE}"
-        notify "Whisper" "Post-processing (${WHISPER_POST_PROCESS})..." ""
-        post_process_text
+
+        # DEV benchmark mode: run through all installed local models
+        if [ "${WHISPER_DEV_TIMINGS}" = "1" ] && [ "${WHISPER_PP_BACKEND}" = "local" ]; then
+            local raw_text system_prompt
+            raw_text="$(cat "${TEXT_FILE}" 2>/dev/null || true)"
+            system_prompt="$(post_process_prompt "${WHISPER_POST_PROCESS}")"
+            notify "Whisper" "Benchmark: running all local models..." ""
+            _ts_pp_start="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+            benchmark_local_models "${raw_text}" "${system_prompt}"
+            _ts_pp_end="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+            _did_benchmark=1
+        else
+            notify "Whisper" "Post-processing (${WHISPER_POST_PROCESS})..." ""
+            _ts_pp_start="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+            post_process_text
+            _ts_pp_end="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
+        fi
+
         rm -f "${POSTPROCESSING_FILE}"
+    fi
+
+    # Append timing breakdown if dev mode enabled
+    if [ "${WHISPER_DEV_TIMINGS}" = "1" ]; then
+        local _t_transcribe _t_pp _timing_line
+        _t_transcribe="$(python3 -c "print(f'{${_ts_transcribe_end}-${_ts_transcribe_start}:.1f}')" 2>/dev/null)"
+        if [ "${_did_benchmark}" = "1" ]; then
+            # Benchmark already appended its own results; just prepend STT time
+            _timing_line="\n[DEV] Transcription: ${_t_transcribe}s"
+        else
+            _timing_line="\n\n[DEV] Transcription: ${_t_transcribe}s"
+            if [ -n "${_ts_pp_start}" ] && [ -n "${_ts_pp_end}" ]; then
+                _t_pp="$(python3 -c "print(f'{${_ts_pp_end}-${_ts_pp_start}:.1f}')" 2>/dev/null)"
+                _timing_line="${_timing_line} | Post-processing: ${_t_pp}s"
+            fi
+        fi
+        printf '%s' "${_timing_line}" >> "${TEXT_FILE}"
     fi
 
     local result preview

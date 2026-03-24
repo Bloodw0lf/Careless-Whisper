@@ -509,6 +509,10 @@
         background: var(--orange);
         animation: pulse 1.2s infinite;
       }
+      .server-dot.stopping {
+        background: var(--orange);
+        animation: pulse 1.2s infinite;
+      }
     </style>
   </head>
   <body>
@@ -803,6 +807,13 @@
       }
 
       function localServerAction(cmd) {
+        // Optimistic UI: show transitional state immediately
+        if (cmd === "start") {
+          localServerState.transitioning = "starting";
+        } else if (cmd === "stop") {
+          localServerState.transitioning = "stopping";
+        }
+        renderBackend("local");
         sendToLua("action", { command: "localServer", subcommand: cmd });
       }
 
@@ -929,38 +940,8 @@
           }
         }
 
-        // Local server controls (only visible when local is selected)
+        // Local model section (only visible when local is selected)
         if (activeBackend === "local") {
-          var isRunning = localServerState.running;
-          var dotClass = isRunning ? "running" : "";
-          var statusText = isRunning ? "Running" : "Stopped";
-          var btnLabel = isRunning ? "Stop" : "Start";
-          var btnId = isRunning ? "btnLocalStop" : "btnLocalStart";
-          var modelDisplay = localServerState.model || "No model configured";
-          if (modelDisplay.length > 40) {
-            modelDisplay = "…" + modelDisplay.slice(-38);
-          }
-          html += '<div class="server-status-row">';
-          html +=
-            '<div class="server-status-indicator">' +
-            '<div class="server-dot ' +
-            dotClass +
-            '"></div>' +
-            '<span style="color:var(--text-dim)">' +
-            statusText +
-            "</span></div>";
-          html +=
-            '<button class="api-key-btn" id="' +
-            btnId +
-            '">' +
-            btnLabel +
-            "</button>";
-          html += "</div>";
-          html +=
-            '<div style="padding:2px 12px 6px; font-size:11px; color:var(--text-dim)">' +
-            escapeHtml(modelDisplay) +
-            "</div>";
-
           // Local model download section
           var hasModel =
             localServerState.model &&
@@ -1027,11 +1008,13 @@
 
       // Called by Lua with local server status
       function updateLocalServer(data) {
+        // Clear transitioning state when real status arrives
         localServerState = data || {
           running: false,
           healthy: false,
           model: "",
         };
+        localServerState.transitioning = null;
         // Re-render backend if local is active
         if (currentBackend === "local") {
           renderBackend("local");
@@ -1275,15 +1258,6 @@
           // Save API key button
           if (el.id === "btnSaveApiKey") {
             saveClaudeApiKey();
-            return;
-          }
-          // Local server start/stop
-          if (el.id === "btnLocalStart") {
-            localServerAction("start");
-            return;
-          }
-          if (el.id === "btnLocalStop") {
-            localServerAction("stop");
             return;
           }
           // Local model select

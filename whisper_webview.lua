@@ -167,6 +167,30 @@ local function handle_message(msg)
                     hs.urlevent.openURL("https://github.com/login/device")
                 end)
             end
+        elseif cmd == "localServer" then
+            local sub = data.subcommand
+            if sub == "start" then
+                bridge.local_server_start(function(ok, msg)
+                    if not ok then
+                        hs.alert.show("Failed: " .. (msg or "unknown error"))
+                    end
+                    M.pushLocalServer()
+                end)
+            elseif sub == "stop" then
+                bridge.local_server_stop(function()
+                    M.pushLocalServer()
+                end)
+            end
+        elseif cmd == "selfUpdate" then
+            bridge.self_update(function(success, output)
+                if success then
+                    hs.alert.show("✓ Update complete — reloading")
+                    hs.timer.doAfter(1, function() hs.reload() end)
+                else
+                    hs.alert.show("Update failed")
+                    eval_js('updateUpdateStatus({available:false})')
+                end
+            end)
         end
 
     elseif action == "setSetting" then
@@ -216,36 +240,6 @@ local function handle_message(msg)
         if data.text then
             hs.pasteboard.setContents(data.text)
             hs.alert.show("Copied to clipboard")
-        end
-
-    elseif action == "selfUpdate" then
-        bridge.self_update(function(success, output)
-            if success then
-                hs.alert.show("✓ Update complete — reloading")
-                hs.timer.doAfter(1, function() hs.reload() end)
-            else
-                hs.alert.show("Update failed")
-                eval_js('updateUpdateStatus({available:false})')
-            end
-        end)
-
-    elseif action == "localServer" then
-        local sub = data.subcommand
-        if sub == "start" then
-            hs.alert.show("Starting llama-server…")
-            bridge.local_server_start(function(ok, msg)
-                if ok then
-                    hs.alert.show("✓ llama-server running")
-                else
-                    hs.alert.show("Failed: " .. (msg or "unknown error"))
-                end
-                M.pushLocalServer()
-            end)
-        elseif sub == "stop" then
-            bridge.local_server_stop(function()
-                hs.alert.show("llama-server stopped")
-                M.pushLocalServer()
-            end)
         end
     end
 end
