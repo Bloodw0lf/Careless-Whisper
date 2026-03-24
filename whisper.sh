@@ -511,7 +511,11 @@ print(json.dumps({
         if [ "${http_code}" = "400" ]; then
             local err_msg
             err_msg="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('error',{}).get('message',''))" <<< "${response}" 2>/dev/null)"
-            notify "Whisper" "Claude error: ${err_msg:-bad request}" "Basso"
+            if echo "${err_msg}" | grep -qi "credit balance"; then
+                osascript -e 'display dialog "Claude API: no credits left.\nTop up at console.anthropic.com/settings/billing" with title "Whisper – Claude Error" buttons {"OK"} default button "OK" with icon caution' >/dev/null 2>&1 || true
+            else
+                notify "Whisper" "Claude error: ${err_msg:-bad request}" "Basso"
+            fi
             return 1
         fi
 
