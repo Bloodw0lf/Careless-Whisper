@@ -67,7 +67,7 @@ WHISPER_PP_BACKEND="${WHISPER_PP_BACKEND:-copilot}"
 WHISPER_COPILOT_MODEL="${WHISPER_COPILOT_MODEL:-claude-sonnet-4.6}"
 # Claude API (direct via api.anthropic.com)
 WHISPER_CLAUDE_API_KEY="${WHISPER_CLAUDE_API_KEY:-}"
-WHISPER_CLAUDE_MODEL="${WHISPER_CLAUDE_MODEL:-claude-sonnet-4-20250514}"
+WHISPER_CLAUDE_MODEL="${WHISPER_CLAUDE_MODEL:-claude-haiku-4-20250414}"
 # Local model via llama-server (llama.cpp)
 WHISPER_LOCAL_MODEL="${WHISPER_LOCAL_MODEL:-}"
 WHISPER_LOCAL_URL="${WHISPER_LOCAL_URL:-http://127.0.0.1:8085}"
@@ -505,6 +505,13 @@ print(json.dumps({
 
         if [ "${http_code}" = "401" ]; then
             notify "Whisper" "Claude API key invalid" "Basso"
+            return 1
+        fi
+
+        if [ "${http_code}" = "400" ]; then
+            local err_msg
+            err_msg="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('error',{}).get('message',''))" <<< "${response}" 2>/dev/null)"
+            notify "Whisper" "Claude error: ${err_msg:-bad request}" "Basso"
             return 1
         fi
 
