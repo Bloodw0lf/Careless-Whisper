@@ -566,9 +566,26 @@
           <span class="setting-label">Restore clipboard after paste</span>
           <div class="toggle" id="toggleRestoreClipboard"></div>
         </div>
-        <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:4px">
-          <span class="setting-label">Custom vocabulary</span>
-          <input class="api-key-input" type="text" id="customVocabInput" placeholder="ISE, MAB, DNAC, ..." style="width:100%;box-sizing:border-box">
+      </div>
+
+      <!-- Custom Vocabulary -->
+      <div class="section" id="sectionVocab">
+        <div class="section-header" data-toggle-section="vocab">
+          <div>
+            <span class="section-title" style="padding: 0">Custom Vocabulary</span>
+            <span id="vocabSummary" style="font-size:11px;color:var(--text-dim);margin-left:6px"></span>
+          </div>
+          <span class="section-chevron" id="chevronVocab">▶</span>
+        </div>
+        <div class="section-body" id="bodyVocab">
+          <div style="padding:6px 12px 10px">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">
+              Terms that Whisper and post-processing should spell correctly. Comma-separated.
+            </div>
+            <input class="api-key-input" type="text" id="customVocabInput"
+                   placeholder="e.g. ISE, MAB, DNAC, pfSense"
+                   style="width:100%;box-sizing:border-box">
+          </div>
         </div>
       </div>
 
@@ -885,6 +902,20 @@
         if (vocabInput && settings.WHISPER_CUSTOM_VOCAB !== undefined) {
           if (document.activeElement !== vocabInput) {
             vocabInput.value = settings.WHISPER_CUSTOM_VOCAB;
+          }
+        }
+        // Update collapsed summary
+        var vocabSummary = document.getElementById("vocabSummary");
+        if (vocabSummary) {
+          var val = (settings.WHISPER_CUSTOM_VOCAB || "").trim();
+          if (val) {
+            var count = val.split(",").filter(function (s) {
+              return s.trim();
+            }).length;
+            vocabSummary.textContent =
+              count + (count === 1 ? " term" : " terms");
+          } else {
+            vocabSummary.textContent = "";
           }
         }
       }
@@ -1323,15 +1354,30 @@
       // Request initial data from Lua once DOM is ready
       sendToLua("init");
 
-      // Save custom vocabulary on blur
+      // Save custom vocabulary on blur and update summary
       var vocabEl = document.getElementById("customVocabInput");
       if (vocabEl) {
+        var updateVocabSummary = function () {
+          var sum = document.getElementById("vocabSummary");
+          if (!sum) return;
+          var val = vocabEl.value.trim();
+          if (val) {
+            var count = val.split(",").filter(function (s) {
+              return s.trim();
+            }).length;
+            sum.textContent = count + (count === 1 ? " term" : " terms");
+          } else {
+            sum.textContent = "";
+          }
+        };
         vocabEl.addEventListener("focusout", function () {
           sendToLua("setSetting", {
             key: "WHISPER_CUSTOM_VOCAB",
             value: vocabEl.value.trim(),
           });
+          updateVocabSummary();
         });
+        vocabEl.addEventListener("input", updateVocabSummary);
       }
 
       // Handle Enter key in API key input
