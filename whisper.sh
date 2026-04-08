@@ -34,6 +34,7 @@ WHISPER_LANGUAGE="${WHISPER_LANGUAGE:-auto}"
 WHISPER_TRANSLATE="${WHISPER_TRANSLATE:-0}"
 WHISPER_AUTO_PASTE="${WHISPER_AUTO_PASTE:-1}"
 WHISPER_AUTO_ENTER="${WHISPER_AUTO_ENTER:-0}"
+WHISPER_RESTORE_CLIPBOARD="${WHISPER_RESTORE_CLIPBOARD:-0}"
 MAX_SECONDS="${WHISPER_MAX_SECONDS:-7200}"
 WHISPER_HISTORY_FILE="${WHISPER_HISTORY_FILE:-${SCRIPT_DIR}/history.txt}"
 TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-${WHISPER_TMPDIR}/whisper_transcribing}"
@@ -770,7 +771,8 @@ whisper_server_transcribe() {
     response="$(sed '$ d' <<< "${response}")"
 
     if [ "${http_code}" = "200" ] && [ -n "${response}" ]; then
-        printf '%s' "${response}" > "${TEXT_FILE}"
+        # Collapse newlines and multiple spaces into continuous text (same as whisper-cli path)
+        printf '%s' "${response}" | tr '\n' ' ' | sed 's/  */ /g' > "${TEXT_FILE}"
         return 0
     fi
 
@@ -1384,6 +1386,12 @@ stop_recording() {
     if [ -n "${result}" ]; then
         append_to_history "${result}"
 
+        # Save current clipboard so we can restore it after pasting
+        local saved_clipboard=""
+        if [ "${WHISPER_RESTORE_CLIPBOARD}" = "1" ]; then
+            saved_clipboard="$(pbpaste 2>/dev/null || true)"
+        fi
+
         if ! copy_to_clipboard "${TEXT_FILE}"; then
             notify "Whisper" "Clipboard copy failed" "Basso"
             return 1
@@ -1394,6 +1402,11 @@ stop_recording() {
             if [ "${WHISPER_AUTO_ENTER}" = "1" ]; then
                 osascript -e 'tell application "System Events" to key code 36' >/dev/null 2>&1 || true
             fi
+        fi
+
+        # Restore previous clipboard content
+        if [ "${WHISPER_RESTORE_CLIPBOARD}" = "1" ] && [ -n "${saved_clipboard}" ]; then
+            printf '%s' "${saved_clipboard}" | pbcopy 2>/dev/null
         fi
 
         if [ "${#result}" -gt 80 ]; then

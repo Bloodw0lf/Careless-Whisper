@@ -562,6 +562,10 @@
           <span class="setting-label">Auto-Enter after paste</span>
           <div class="toggle" id="toggleAutoEnter"></div>
         </div>
+        <div class="setting-row" data-setting="WHISPER_RESTORE_CLIPBOARD">
+          <span class="setting-label">Restore clipboard after paste</span>
+          <div class="toggle" id="toggleRestoreClipboard"></div>
+        </div>
       </div>
 
       <!-- Post-Processing Backend -->
@@ -736,6 +740,7 @@
         WHISPER_NOTIFICATIONS: document.getElementById("toggleNotifications"),
         WHISPER_SOUNDS: document.getElementById("toggleSounds"),
         WHISPER_AUTO_ENTER: document.getElementById("toggleAutoEnter"),
+        WHISPER_RESTORE_CLIPBOARD: document.getElementById("toggleRestoreClipboard"),
       };
 
       // ── Collapsible Sections ────────────────────────────────────────────────────

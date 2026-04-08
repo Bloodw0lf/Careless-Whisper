@@ -42,12 +42,13 @@ end
 function M.pushSettings()
     if not bridge then return end
     local settings = {
-        WHISPER_NOTIFICATIONS  = bridge.read_conf("WHISPER_NOTIFICATIONS", "1"),
-        WHISPER_SOUNDS         = bridge.read_conf("WHISPER_SOUNDS", "1"),
-        WHISPER_AUTO_ENTER     = bridge.read_conf("WHISPER_AUTO_ENTER", "0"),
-        WHISPER_POST_PROCESS   = bridge.read_conf("WHISPER_POST_PROCESS", "off"),
-        WHISPER_PP_BACKEND     = bridge.read_conf("WHISPER_PP_BACKEND", "copilot"),
-        WHISPER_CLAUDE_API_KEY = bridge.read_conf("WHISPER_CLAUDE_API_KEY", ""),
+        WHISPER_NOTIFICATIONS      = bridge.read_conf("WHISPER_NOTIFICATIONS", "1"),
+        WHISPER_SOUNDS             = bridge.read_conf("WHISPER_SOUNDS", "1"),
+        WHISPER_AUTO_ENTER         = bridge.read_conf("WHISPER_AUTO_ENTER", "0"),
+        WHISPER_RESTORE_CLIPBOARD  = bridge.read_conf("WHISPER_RESTORE_CLIPBOARD", "0"),
+        WHISPER_POST_PROCESS       = bridge.read_conf("WHISPER_POST_PROCESS", "off"),
+        WHISPER_PP_BACKEND         = bridge.read_conf("WHISPER_PP_BACKEND", "copilot"),
+        WHISPER_CLAUDE_API_KEY     = bridge.read_conf("WHISPER_CLAUDE_API_KEY", ""),
     }
     eval_js("updateSettings(" .. json_encode(settings) .. ")")
 end
@@ -201,6 +202,7 @@ local function handle_message(msg)
             WHISPER_NOTIFICATIONS = true,
             WHISPER_SOUNDS = true,
             WHISPER_AUTO_ENTER = true,
+            WHISPER_RESTORE_CLIPBOARD = true,
             WHISPER_POST_PROCESS = true,
             WHISPER_PP_BACKEND = true,
             WHISPER_CLAUDE_API_KEY = true,
