@@ -566,6 +566,10 @@
           <span class="setting-label">Restore clipboard after paste</span>
           <div class="toggle" id="toggleRestoreClipboard"></div>
         </div>
+        <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:4px">
+          <span class="setting-label">Custom vocabulary</span>
+          <input class="api-key-input" type="text" id="customVocabInput" placeholder="ISE, MAB, DNAC, ..." style="width:100%;box-sizing:border-box">
+        </div>
       </div>
 
       <!-- Post-Processing Backend -->
@@ -683,16 +687,18 @@
       }
 
       function saveClaudeApiKey() {
+        if (!claudeApiKeyDirty) return;
         var input = document.getElementById("claudeApiKeyInput");
         if (!input) return;
         var key = input.value.trim();
+        if (!key) return;
         sendToLua("setSetting", {
           key: "WHISPER_CLAUDE_API_KEY",
           value: key,
         });
+        claudeApiKeyDirty = false;
         // Mask input after save
-        if (key) {
-          input.value = "sk-ant-..." + key.slice(-4);
+        input.value = "sk-ant-..." + key.slice(-4);
           input.type = "password";
         }
       }
@@ -740,7 +746,9 @@
         WHISPER_NOTIFICATIONS: document.getElementById("toggleNotifications"),
         WHISPER_SOUNDS: document.getElementById("toggleSounds"),
         WHISPER_AUTO_ENTER: document.getElementById("toggleAutoEnter"),
-        WHISPER_RESTORE_CLIPBOARD: document.getElementById("toggleRestoreClipboard"),
+        WHISPER_RESTORE_CLIPBOARD: document.getElementById(
+          "toggleRestoreClipboard",
+        ),
       };
 
       // ── Collapsible Sections ────────────────────────────────────────────────────
@@ -871,10 +879,19 @@
           currentBackend = settings.WHISPER_PP_BACKEND;
           renderBackend(settings.WHISPER_PP_BACKEND, settings);
         }
+
+        // Custom vocabulary
+        var vocabInput = document.getElementById("customVocabInput");
+        if (vocabInput && settings.WHISPER_CUSTOM_VOCAB !== undefined) {
+          if (document.activeElement !== vocabInput) {
+            vocabInput.value = settings.WHISPER_CUSTOM_VOCAB;
+          }
+        }
       }
 
       // ── Backend Rendering ────────────────────────────────────────────────────────
       var currentBackend = "copilot";
+      var claudeApiKeyDirty = false;
       var PP_BACKENDS = [
         {
           id: "copilot",
@@ -1005,6 +1022,15 @@
         container.innerHTML = html;
         if (sections["backend"]) {
           container.classList.add("open");
+        }
+
+        // Track whether user actually edited the API key input
+        claudeApiKeyDirty = false;
+        var apiInput = document.getElementById("claudeApiKeyInput");
+        if (apiInput) {
+          apiInput.addEventListener("input", function () {
+            claudeApiKeyDirty = true;
+          });
         }
 
         // Show/hide auth section based on backend
@@ -1296,6 +1322,17 @@
 
       // Request initial data from Lua once DOM is ready
       sendToLua("init");
+
+      // Save custom vocabulary on blur
+      var vocabEl = document.getElementById("customVocabInput");
+      if (vocabEl) {
+        vocabEl.addEventListener("focusout", function () {
+          sendToLua("setSetting", {
+            key: "WHISPER_CUSTOM_VOCAB",
+            value: vocabEl.value.trim(),
+          });
+        });
+      }
 
       // Handle Enter key in API key input
       document.addEventListener("keydown", function (e) {

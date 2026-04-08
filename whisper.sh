@@ -35,6 +35,7 @@ WHISPER_TRANSLATE="${WHISPER_TRANSLATE:-0}"
 WHISPER_AUTO_PASTE="${WHISPER_AUTO_PASTE:-1}"
 WHISPER_AUTO_ENTER="${WHISPER_AUTO_ENTER:-0}"
 WHISPER_RESTORE_CLIPBOARD="${WHISPER_RESTORE_CLIPBOARD:-0}"
+WHISPER_TRIM_SILENCE="${WHISPER_TRIM_SILENCE:-1}"
 MAX_SECONDS="${WHISPER_MAX_SECONDS:-7200}"
 WHISPER_HISTORY_FILE="${WHISPER_HISTORY_FILE:-${SCRIPT_DIR}/history.txt}"
 TRANSCRIBING_FILE="${WHISPER_TRANSCRIBING_FILE:-${WHISPER_TMPDIR}/whisper_transcribing}"
@@ -74,6 +75,7 @@ WHISPER_LOCAL_MODEL="${WHISPER_LOCAL_MODEL:-}"
 WHISPER_LOCAL_URL="${WHISPER_LOCAL_URL:-http://127.0.0.1:8085}"
 WHISPER_LOCAL_GPU_LAYERS="${WHISPER_LOCAL_GPU_LAYERS:-99}"
 WHISPER_LOCAL_CTX="${WHISPER_LOCAL_CTX:-8192}"
+WHISPER_CUSTOM_VOCAB="${WHISPER_CUSTOM_VOCAB:-}"
 
 find_bin() {
     local name="$1"
@@ -204,6 +206,33 @@ print(data.get('access_token', ''))
     return 1
 }
 
+# ── Post-processing prompt helpers ─────────────────────────────────────────
+
+pp_spelling_hints() {
+    cat <<'BLOCK'
+Spelling hints in speech:
+- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
+- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
+- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
+- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+BLOCK
+    if [ "${1:-}" = "email" ]; then
+        printf '%s\n' "- The relevant word is typically within 5-10 words before the spelling"
+    fi
+}
+
+pp_no_ai_punctuation() {
+    cat <<'BLOCK'
+- NEVER use AI-typical punctuation or phrasing: no semicolons (;), no em dashes (—), no en dashes (–), no colons for emphasis. Use commas, periods. Use normal dashes (-) only when it's connecting two words together. Write like a normal person typing, not like a language model.
+BLOCK
+}
+
+pp_custom_vocab() {
+    if [ -n "${WHISPER_CUSTOM_VOCAB}" ]; then
+        printf '\nCustom vocabulary — use these exact spellings when these terms appear:\n%s\n' "${WHISPER_CUSTOM_VOCAB}"
+    fi
+}
+
 post_process_prompt() {
     local mode="$1"
     case "${mode}" in
@@ -225,11 +254,10 @@ Whisper hallucinations:
 - whisper.cpp sometimes hallucinates phantom text from silence or noise. Remove obvious hallucinations like "Vielen Dank für's Zuschauen", "Untertitel von...", "Thank you for watching", "Bis zum nächsten Mal", or any text that clearly does not match spoken content
 - Also remove repetitive looping phrases that whisper generates when audio is unclear
 
-Spelling hints in speech:
-- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
-- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
-- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
-- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+PROMPT
+            pp_spelling_hints
+            pp_custom_vocab
+            cat <<'PROMPT'
 
 - Preserve technical terms, names, and numbers using corrected spellings
 - Output ONLY the cleaned text, nothing else — no explanations, no quotes
@@ -245,13 +273,12 @@ Rules:
 - Do NOT insert empty lines (paragraph breaks) between sections. On messaging platforms, people write in compact blocks. Use a single line break at most to separate a closing question or call-to-action, but never double newlines.
 - Keep the original language (German stays German, English stays English)
 - Keep a professional but approachable tone
-- NEVER use AI-typical punctuation or phrasing: no semicolons (;), no em dashes (—), no en dashes (–), no colons for emphasis. Use commas, periods. Use normal dashes (-) only when it's connecting two words together. Write like a normal person typing, not like a language model.
-
-Spelling hints in speech:
-- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
-- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
-- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
-- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+PROMPT
+            pp_no_ai_punctuation
+            printf '\n'
+            pp_spelling_hints
+            pp_custom_vocab
+            cat <<'PROMPT'
 
 - Preserve technical terms, names, and numbers using corrected spellings
 - Output ONLY the message text, nothing else — no explanations, no quotes
@@ -270,14 +297,12 @@ Rules:
 - Structure with short, clear paragraphs
 - Keep the original language (German stays German, English stays English)
 - Use a professional, polite, but not overly formal tone
-- NEVER use AI-typical punctuation or phrasing: no semicolons (;), no em dashes (—), no en dashes (–), no colons for emphasis. Use commas, periods. Use normal dashes (-) only when it's connecting two words together. Write like a normal person typing, not like a language model.
-
-Spelling hints in speech:
-- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
-- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
-- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
-- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
-- The relevant word is typically within 5-10 words before the spelling
+PROMPT
+            pp_no_ai_punctuation
+            printf '\n'
+            pp_spelling_hints "email"
+            pp_custom_vocab
+            cat <<'PROMPT'
 
 - Preserve technical terms, product names, and numbers using the corrected spellings
 - Do NOT invent a subject line — only the email body
@@ -298,11 +323,10 @@ Rules:
 - Do NOT add anything the user didn't say — no extra context, no assumptions, no embellishments
 - You MAY use any formatting that helps AI models parse the prompt effectively (markdown headers, em dashes, bullet points, etc.) — the output is for AI consumption, not human reading
 
-Spelling hints in speech:
-- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
-- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
-- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
-- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+PROMPT
+            pp_spelling_hints
+            pp_custom_vocab
+            cat <<'PROMPT'
 
 - Output ONLY the cleaned prompt, nothing else — no explanations, no quotes, no meta-commentary
 PROMPT
@@ -324,11 +348,10 @@ Rules:
 - Use any formatting that helps AI models parse the prompt effectively (markdown headers, em dashes, bullet points, etc.) — the output is for AI consumption
 - Match the complexity of the enhanced prompt to the complexity of the request — a simple question gets a concise enhanced prompt, not a 500-word framework
 
-Spelling hints in speech:
-- The speaker sometimes spells out letters to clarify a technical term (e.g. "ISE I-S-E", "MAP, also M-A-B")
-- The spelled letters ALWAYS override the preceding word. Combine the letters into the correct term: M-A-B → MAB, I-S-E → ISE
-- The spoken word before the spelling may be WRONG (speech-to-text error). Always trust the spelled version.
-- REMOVE the spelled-out letters and any bridging words ("also", "ist", "meaning") from the output
+PROMPT
+            pp_spelling_hints
+            pp_custom_vocab
+            cat <<'PROMPT'
 
 - Output ONLY the enhanced prompt, nothing else — no explanations, no quotes, no meta-commentary
 PROMPT
@@ -762,6 +785,9 @@ whisper_server_transcribe() {
     if [ "${WHISPER_TRANSLATE}" = "1" ]; then
         curl_args+=(-F "translate=true")
     fi
+    if [ -n "${WHISPER_CUSTOM_VOCAB}" ]; then
+        curl_args+=(-F "prompt=${WHISPER_CUSTOM_VOCAB}")
+    fi
 
     local response http_code
     response="$(curl -w '\n%{http_code}' "${curl_args[@]}" \
@@ -1129,6 +1155,23 @@ next_segment_index() {
     printf '%s\n' "$(( idx + 1 ))" > "${SEGMENT_INDEX_FILE}"
 }
 
+# ── Trim leading/trailing silence to reduce Whisper hallucinations ─────────
+
+trim_silence() {
+    if [ "${WHISPER_TRIM_SILENCE}" != "1" ]; then
+        return 0
+    fi
+    local input="${AUDIO_FILE}"
+    local trimmed="${WHISPER_TMPDIR}/whisper_trimmed.wav"
+    if "${FFMPEG_BIN}" -y -i "${input}" -af \
+        "silenceremove=start_periods=1:start_silence=0.5:start_threshold=-40dB,areverse,silenceremove=start_periods=1:start_silence=0.5:start_threshold=-40dB,areverse" \
+        "${trimmed}" >/dev/null 2>&1 && [ -s "${trimmed}" ]; then
+        mv "${trimmed}" "${input}"
+    else
+        rm -f "${trimmed}"
+    fi
+}
+
 concat_segments() {
     local -a valid_segments=()
     for seg in "${SEGMENTS_DIR}"/segment_*.wav; do
@@ -1305,6 +1348,8 @@ stop_recording() {
         return 1
     fi
 
+    trim_silence
+
     notify "Whisper" "Transcribing..." ""
 
     local _ts_transcribe_start
@@ -1319,6 +1364,9 @@ stop_recording() {
         cmd=("${WHISPER_BIN}" -m "${MODEL}" --no-prints -l "${WHISPER_LANGUAGE}")
         if [ "${WHISPER_TRANSLATE}" = "1" ]; then
             cmd+=(-tr)
+        fi
+        if [ -n "${WHISPER_CUSTOM_VOCAB}" ]; then
+            cmd+=(--prompt "${WHISPER_CUSTOM_VOCAB}")
         fi
         cmd+=("${AUDIO_FILE}")
         if ! "${cmd[@]}" 2>"${ERROR_LOG_FILE}" | sed 's/^\[.*\] //' | tr '\n' ' ' | sed 's/  */ /g' > "${TEXT_FILE}"; then

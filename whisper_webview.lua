@@ -49,6 +49,7 @@ function M.pushSettings()
         WHISPER_POST_PROCESS       = bridge.read_conf("WHISPER_POST_PROCESS", "off"),
         WHISPER_PP_BACKEND         = bridge.read_conf("WHISPER_PP_BACKEND", "copilot"),
         WHISPER_CLAUDE_API_KEY     = bridge.read_conf("WHISPER_CLAUDE_API_KEY", ""),
+        WHISPER_CUSTOM_VOCAB       = bridge.read_conf("WHISPER_CUSTOM_VOCAB", ""),
     }
     eval_js("updateSettings(" .. json_encode(settings) .. ")")
 end
@@ -206,6 +207,7 @@ local function handle_message(msg)
             WHISPER_POST_PROCESS = true,
             WHISPER_PP_BACKEND = true,
             WHISPER_CLAUDE_API_KEY = true,
+            WHISPER_CUSTOM_VOCAB = true,
         }
         if key and value and allowed[key] then
             bridge.update_conf_value(key, value)
