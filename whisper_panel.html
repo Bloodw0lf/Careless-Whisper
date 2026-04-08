@@ -581,10 +581,14 @@
           <div style="padding:6px 12px 10px">
             <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">
               Terms that Whisper and post-processing should spell correctly. Comma-separated.
+              Whisper's prompt window is limited — keep this concise.
             </div>
             <input class="api-key-input" type="text" id="customVocabInput"
-                   placeholder="e.g. ISE, MAB, DNAC, pfSense"
+                   placeholder="e.g. ISE, MAB, DNAC, pfSense" maxlength="500"
                    style="width:100%;box-sizing:border-box">
+            <div style="display:flex;justify-content:flex-end;margin-top:3px">
+              <span id="vocabCharCount" style="font-size:10px;color:var(--text-dim)"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -1358,15 +1362,27 @@
       if (vocabEl) {
         var updateVocabSummary = function () {
           var sum = document.getElementById("vocabSummary");
-          if (!sum) return;
+          var charCount = document.getElementById("vocabCharCount");
           var val = vocabEl.value.trim();
-          if (val) {
-            var count = val.split(",").filter(function (s) {
-              return s.trim();
-            }).length;
-            sum.textContent = count + (count === 1 ? " term" : " terms");
-          } else {
-            sum.textContent = "";
+          if (sum) {
+            if (val) {
+              var count = val.split(",").filter(function (s) {
+                return s.trim();
+              }).length;
+              sum.textContent = count + (count === 1 ? " term" : " terms");
+            } else {
+              sum.textContent = "";
+            }
+          }
+          if (charCount) {
+            var len = vocabEl.value.length;
+            if (len > 0) {
+              charCount.textContent = len + " / 500";
+              charCount.style.color = len > 400 ? "#e5c07b" : "var(--text-dim)";
+              if (len >= 500) charCount.style.color = "#e06c75";
+            } else {
+              charCount.textContent = "";
+            }
           }
         };
         vocabEl.addEventListener("focusout", function () {
