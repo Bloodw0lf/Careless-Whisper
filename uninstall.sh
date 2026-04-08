@@ -47,7 +47,9 @@ for tmpdir in "${TMPDIR:-}" /tmp; do
           "${tmpdir}/whisper_segment_index" \
           "${tmpdir}/whisper_debug.log" \
           "${tmpdir}/ffmpeg.log" \
-          "${tmpdir}/whisper-error.log"
+          "${tmpdir}/whisper-error.log" \
+          "${tmpdir}/whisper-server.pid" \
+          "${tmpdir}/whisper-server.log"
     rm -rf "${tmpdir}/whisper_segments"
 done
 

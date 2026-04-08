@@ -92,6 +92,7 @@ find_bin() {
 
 FFMPEG_BIN="$(find_bin ffmpeg)"
 WHISPER_BIN="$(find_bin whisper-cli)"
+WHISPER_SERVER_BIN="$(find_bin whisper-server)"
 
 # ── Copilot API for post-processing ──────────────────────────────────────────
 
@@ -654,6 +655,128 @@ local_server_status() {
     printf 'url:%s\n' "${WHISPER_LOCAL_URL}"
 }
 
+# ── Whisper server for pre-warmed transcription ──────────────────────────────
+
+WHISPER_SERVER_PID_FILE="${WHISPER_TMPDIR}/whisper-server.pid"
+WHISPER_SERVER_PORT="8083"
+WHISPER_SERVER_URL="http://127.0.0.1:${WHISPER_SERVER_PORT}"
+
+whisper_server_running() {
+    if [ -f "${WHISPER_SERVER_PID_FILE}" ]; then
+        local pid
+        pid="$(cat "${WHISPER_SERVER_PID_FILE}" 2>/dev/null)"
+        if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "${WHISPER_SERVER_PID_FILE}"
+    fi
+    return 1
+}
+
+whisper_server_start() {
+    if whisper_server_running; then
+        return 0
+    fi
+
+    if [ -z "${WHISPER_SERVER_BIN}" ]; then
+        return 1
+    fi
+
+    if [ ! -f "${MODEL}" ]; then
+        return 1
+    fi
+
+    local -a server_args=(
+        --host 127.0.0.1
+        --port "${WHISPER_SERVER_PORT}"
+        -m "${MODEL}"
+        -l "${WHISPER_LANGUAGE}"
+        --flash-attn
+    )
+    if [ "${WHISPER_TRANSLATE}" = "1" ]; then
+        server_args+=(--translate)
+    fi
+
+    cd "${SCRIPT_DIR}" 2>/dev/null || cd /tmp
+
+    "${WHISPER_SERVER_BIN}" "${server_args[@]}" \
+        > "${WHISPER_TMPDIR}/whisper-server.log" 2>&1 &
+
+    local pid=$!
+    printf '%s' "${pid}" > "${WHISPER_SERVER_PID_FILE}"
+
+    # Wait for server to become ready (up to 30s)
+    local attempts=0
+    while [ "${attempts}" -lt 60 ]; do
+        if curl -s --max-time 1 "${WHISPER_SERVER_URL}/health" 2>/dev/null | grep -q '"ok"'; then
+            return 0
+        fi
+        sleep 0.5
+        attempts=$((attempts + 1))
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            rm -f "${WHISPER_SERVER_PID_FILE}"
+            return 1
+        fi
+    done
+
+    # Timeout but process still alive — usable
+    return 0
+}
+
+whisper_server_stop() {
+    if [ -f "${WHISPER_SERVER_PID_FILE}" ]; then
+        local pid
+        pid="$(cat "${WHISPER_SERVER_PID_FILE}" 2>/dev/null)"
+        if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+            kill "${pid}" 2>/dev/null
+            wait "${pid}" 2>/dev/null || true
+        fi
+        rm -f "${WHISPER_SERVER_PID_FILE}"
+    fi
+}
+
+# Transcribe audio via whisper-server HTTP API.
+# Returns 0 on success (result written to TEXT_FILE), 1 on failure.
+whisper_server_transcribe() {
+    # Wait for server to be healthy (may still be loading after short recording)
+    local attempts=0
+    while [ "${attempts}" -lt 60 ]; do
+        if curl -s --max-time 1 "${WHISPER_SERVER_URL}/health" 2>/dev/null | grep -q '"ok"'; then
+            break
+        fi
+        sleep 0.5
+        attempts=$((attempts + 1))
+    done
+
+    if [ "${attempts}" -ge 60 ]; then
+        return 1
+    fi
+
+    local -a curl_args=(
+        -s --max-time 300
+        -F "file=@${AUDIO_FILE}"
+        -F "response_format=text"
+        -F "language=${WHISPER_LANGUAGE}"
+    )
+    if [ "${WHISPER_TRANSLATE}" = "1" ]; then
+        curl_args+=(-F "translate=true")
+    fi
+
+    local response http_code
+    response="$(curl -w '\n%{http_code}' "${curl_args[@]}" \
+        "${WHISPER_SERVER_URL}/inference" 2>/dev/null)"
+
+    http_code="$(tail -n1 <<< "${response}")"
+    response="$(sed '$ d' <<< "${response}")"
+
+    if [ "${http_code}" = "200" ] && [ -n "${response}" ]; then
+        printf '%s' "${response}" > "${TEXT_FILE}"
+        return 0
+    fi
+
+    return 1
+}
+
 # ── Local LLM model management (GGUFs from Hugging Face) ────────────────────
 
 LOCAL_MODELS_DIR="${SCRIPT_DIR}/models"
@@ -1130,6 +1253,10 @@ start_recording() {
         [ -n "${reason}" ] && printf 'ffmpeg start error: %s\n' "${reason}" >&2
         return 1
     fi
+
+    # Pre-warm whisper model: start the server in the background so the model
+    # is loaded by the time the user stops recording.
+    whisper_server_start >/dev/null 2>&1 &
 }
 
 stop_recording() {
@@ -1163,6 +1290,7 @@ stop_recording() {
     if ! concat_segments; then
         rm -f "${TRANSCRIBING_FILE}"
         rm -rf "${SEGMENTS_DIR}" "${SEGMENT_INDEX_FILE}"
+        whisper_server_stop >/dev/null 2>&1
         notify "Whisper" "No audio recorded. Check microphone settings." "Basso"
         return 1
     fi
@@ -1170,6 +1298,7 @@ stop_recording() {
     if [ ! -f "${AUDIO_FILE}" ] || [ ! -s "${AUDIO_FILE}" ]; then
         rm -f "${TRANSCRIBING_FILE}"
         rm -rf "${SEGMENTS_DIR}" "${SEGMENT_INDEX_FILE}"
+        whisper_server_stop >/dev/null 2>&1
         notify "Whisper" "No audio recorded. Check microphone settings." "Basso"
         return 1
     fi
@@ -1179,19 +1308,25 @@ stop_recording() {
     local _ts_transcribe_start
     _ts_transcribe_start="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
 
-    local -a cmd
-    cmd=("${WHISPER_BIN}" -m "${MODEL}" --no-prints -l "${WHISPER_LANGUAGE}")
-    if [ "${WHISPER_TRANSLATE}" = "1" ]; then
-        cmd+=(-tr)
-    fi
-    cmd+=("${AUDIO_FILE}")
-    if ! "${cmd[@]}" 2>"${ERROR_LOG_FILE}" | sed 's/^\[.*\] //' | tr '\n' ' ' | sed 's/  */ /g' > "${TEXT_FILE}"; then
-        rm -f "${TRANSCRIBING_FILE}"
-        local err
-        err="$(tail -n 1 "${ERROR_LOG_FILE}" 2>/dev/null || true)"
-        notify "Whisper" "Transcription failed. Check ${ERROR_LOG_FILE}" "Basso"
-        [ -n "${err}" ] && printf 'whisper error: %s\n' "${err}" >&2
-        return 1
+    # Try pre-warmed whisper-server first, fall back to whisper-cli
+    if whisper_server_running && whisper_server_transcribe; then
+        whisper_server_stop >/dev/null 2>&1
+    else
+        whisper_server_stop >/dev/null 2>&1
+        local -a cmd
+        cmd=("${WHISPER_BIN}" -m "${MODEL}" --no-prints -l "${WHISPER_LANGUAGE}")
+        if [ "${WHISPER_TRANSLATE}" = "1" ]; then
+            cmd+=(-tr)
+        fi
+        cmd+=("${AUDIO_FILE}")
+        if ! "${cmd[@]}" 2>"${ERROR_LOG_FILE}" | sed 's/^\[.*\] //' | tr '\n' ' ' | sed 's/  */ /g' > "${TEXT_FILE}"; then
+            rm -f "${TRANSCRIBING_FILE}"
+            local err
+            err="$(tail -n 1 "${ERROR_LOG_FILE}" 2>/dev/null || true)"
+            notify "Whisper" "Transcription failed. Check ${ERROR_LOG_FILE}" "Basso"
+            [ -n "${err}" ] && printf 'whisper error: %s\n' "${err}" >&2
+            return 1
+        fi
     fi
     rm -f "${TRANSCRIBING_FILE}"
 
