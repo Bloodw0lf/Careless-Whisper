@@ -75,6 +75,8 @@ WHISPER_LOCAL_MODEL="${WHISPER_LOCAL_MODEL:-}"
 WHISPER_LOCAL_URL="${WHISPER_LOCAL_URL:-http://127.0.0.1:8085}"
 WHISPER_LOCAL_GPU_LAYERS="${WHISPER_LOCAL_GPU_LAYERS:-99}"
 WHISPER_LOCAL_CTX="${WHISPER_LOCAL_CTX:-8192}"
+# PrismML llama.cpp fork for Q1_0 models (Bonsai)
+WHISPER_PRISMML_LLAMA_BIN="${WHISPER_PRISMML_LLAMA_BIN:-${HOME}/.local/share/careless-whisper/prismml-llama-server}"
 WHISPER_CUSTOM_VOCAB="${WHISPER_CUSTOM_VOCAB:-}"
 
 find_bin() {
@@ -441,9 +443,9 @@ print(json.dumps({
             break
         fi
 
-        if [ "${http_code}" = "401" ]; then
+        if [ "${http_code}" = "401" ] || [ "${http_code}" = "403" ]; then
             rm -f "${WHISPER_AUTH_FILE}"
-            notify "Whisper" "Copilot token expired — sign in again via menubar" "Basso"
+            notify "Whisper" "Copilot token expired (${http_code}) — sign in again via menubar" "Basso"
             return 1
         fi
 
@@ -454,12 +456,6 @@ print(json.dumps({
 
     if [ -z "${response}" ]; then
         notify "Whisper" "Post-processing failed — no API response after ${max_retries} attempts" "Basso"
-        return 1
-    fi
-
-    if [ "${http_code}" = "403" ]; then
-        rm -f "${WHISPER_AUTH_FILE}"
-        notify "Whisper" "Copilot token expired — sign in again via menubar" "Basso"
         return 1
     fi
 
@@ -598,11 +594,23 @@ local_server_start() {
         return 1
     fi
 
+    # Pick the right llama-server: PrismML fork for Q1_0 models (Bonsai), Homebrew for the rest
     local llama_bin
-    llama_bin="$(find_bin llama-server)"
-    if [ -z "${llama_bin}" ]; then
-        printf 'error: llama-server not found (brew install llama.cpp)\n' >&2
-        return 1
+    local model_basename
+    model_basename="$(basename "${model_path}")"
+    if [[ "${model_basename}" == Bonsai-* ]]; then
+        llama_bin="${WHISPER_PRISMML_LLAMA_BIN}"
+        if [ ! -x "${llama_bin}" ]; then
+            printf 'error: PrismML llama-server not found at %s\n' "${llama_bin}" >&2
+            printf 'Bonsai Q1_0 models require the PrismML fork. Run: ./install.sh\n' >&2
+            return 1
+        fi
+    else
+        llama_bin="$(find_bin llama-server)"
+        if [ -z "${llama_bin}" ]; then
+            printf 'error: llama-server not found (brew install llama.cpp)\n' >&2
+            return 1
+        fi
     fi
 
     local port
@@ -810,7 +818,8 @@ whisper_server_transcribe() {
 LOCAL_MODELS_DIR="${SCRIPT_DIR}/models"
 
 # Catalog: id|filename|size_label|huggingface_url
-LOCAL_MODEL_CATALOG="Llama-3.2-3B|Llama-3.2-3B-Instruct-Q4_K_M.gguf|~1.9 GB|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf
+LOCAL_MODEL_CATALOG="Bonsai-8B|Bonsai-8B.gguf|~1.2 GB|https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf
+Llama-3.2-3B|Llama-3.2-3B-Instruct-Q4_K_M.gguf|~1.9 GB|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf
 Qwen2.5-7B|Qwen2.5-7B-Instruct-Q4_K_M.gguf|~4.5 GB|https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf
 Qwen2.5-14B|Qwen2.5-14B-Instruct-Q4_K_M.gguf|~9 GB|https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-Q4_K_M.gguf"
 
@@ -829,7 +838,7 @@ download_local_model() {
     local model_id="${2:-}"
     if [ -z "${model_id}" ]; then
         printf 'Usage: %s download-local-model <model-id>\n' "$0" >&2
-        printf 'Available: Qwen2.5-3B, Qwen2.5-7B, Qwen2.5-14B\n' >&2
+        printf 'Available: Bonsai-8B, Llama-3.2-3B, Qwen2.5-7B, Qwen2.5-14B\n' >&2
         exit 1
     fi
 
@@ -851,22 +860,57 @@ download_local_model() {
     local model_path="${LOCAL_MODELS_DIR}/${filename}"
     if [ -f "${model_path}" ]; then
         printf 'already_exists\n'
-        exit 0
+    else
+        mkdir -p "${LOCAL_MODELS_DIR}"
+        notify "Whisper" "Downloading ${model_id}..." ""
+        printf 'downloading:%s\n' "${filename}"
+
+        if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}" 2>&1; then
+            mv "${model_path}.part" "${model_path}"
+            printf 'done:%s\n' "${filename}"
+            notify "Whisper" "Model ${model_id} downloaded" "Glass"
+        else
+            rm -f "${model_path}.part"
+            printf 'failed:%s\n' "${filename}" >&2
+            notify "Whisper" "Download failed for ${model_id}" "Basso"
+            exit 1
+        fi
     fi
 
-    mkdir -p "${LOCAL_MODELS_DIR}"
-    notify "Whisper" "Downloading ${model_id}..." ""
-    printf 'downloading:%s\n' "${filename}"
-
-    if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}" 2>&1; then
-        mv "${model_path}.part" "${model_path}"
-        printf 'done:%s\n' "${filename}"
-        notify "Whisper" "Model ${model_id} downloaded" "Glass"
-    else
-        rm -f "${model_path}.part"
-        printf 'failed:%s\n' "${filename}" >&2
-        notify "Whisper" "Download failed for ${model_id}" "Basso"
-        exit 1
+    # Build PrismML llama.cpp fork for Q1_0 models if needed
+    if [ "${model_id}" = "Bonsai-8B" ] && [ ! -x "${WHISPER_PRISMML_LLAMA_BIN}" ]; then
+        # cmake is required to build the PrismML fork
+        if ! command -v cmake >/dev/null 2>&1; then
+            notify "Whisper" "Installing cmake via Homebrew..." ""
+            printf 'installing_cmake\n'
+            brew install cmake >/dev/null 2>&1
+        fi
+        notify "Whisper" "Building PrismML llama-server for Bonsai Q1_0..." ""
+        printf 'building_prismml\n'
+        local build_dir
+        build_dir="$(mktemp -d)"
+        if (
+            set -e
+            cd "${build_dir}"
+            git clone --depth 1 https://github.com/PrismML-Eng/llama.cpp prismml-llama
+            cd prismml-llama
+            cmake -B build && cmake --build build -j
+            local dest_dir
+            dest_dir="$(dirname "${WHISPER_PRISMML_LLAMA_BIN}")"
+            mkdir -p "${dest_dir}"
+            cp build/bin/llama-server "${WHISPER_PRISMML_LLAMA_BIN}"
+            # Copy shared libraries that the binary needs at runtime
+            find build/bin build/src build/ggml/src -name '*.dylib' -exec cp {} "${dest_dir}/" \; 2>/dev/null || true
+            # Fix rpath so the binary finds libs next to itself
+            install_name_tool -add_rpath @executable_path "${WHISPER_PRISMML_LLAMA_BIN}" 2>/dev/null || true
+        ) >/dev/null 2>&1; then
+            notify "Whisper" "PrismML llama-server built" "Glass"
+            printf 'prismml_done\n'
+        else
+            notify "Whisper" "PrismML build failed — Bonsai won't work" "Basso"
+            printf 'prismml_failed\n'
+        fi
+        rm -rf "${build_dir}"
     fi
 }
 
@@ -892,7 +936,7 @@ print(json.dumps({
         {'role': 'system', 'content': sys.argv[1]},
         {'role': 'user', 'content': sys.argv[2]}
     ],
-    'max_tokens': 1024,
+    'max_tokens': 4096,
     'temperature': 0.2
 }))
 " "${system_prompt}" "${user_content}" 2>/dev/null)"
@@ -995,13 +1039,15 @@ print(json.dumps({
         # Start server with this model
         WHISPER_LOCAL_MODEL="${mfile}"
         local ts_start ts_end
-        ts_start="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
 
         local_server_start >/dev/null 2>&1
         if ! curl -s --max-time 2 "${WHISPER_LOCAL_URL}/health" 2>/dev/null | grep -q 'ok'; then
             output="${output}\n\n── ${mid} (FAILED: server start) ──\n[Server konnte nicht gestartet werden]"
             continue
         fi
+
+        # Timer starts AFTER server is healthy — measures inference only
+        ts_start="$(python3 -c 'import time; print(time.time())' 2>/dev/null)"
 
         # Send request
         local response http_code

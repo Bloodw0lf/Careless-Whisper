@@ -87,7 +87,7 @@ select_menu() {
     # Print final selection
     printf '\r\033[K    \033[32m✓ %s\033[0m\n' "${options[$selected]}"
 
-    eval "${_result_var}=${selected}"
+    printf -v "${_result_var}" '%s' "${selected}"
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -268,10 +268,14 @@ WHISPER_POST_PROCESS=off
 # Local llama-server URL: WHISPER_LOCAL_URL=http://127.0.0.1:8085
 # Local GPU layers: WHISPER_LOCAL_GPU_LAYERS=99
 # Local context size: WHISPER_LOCAL_CTX=8192
+# PrismML llama-server for Q1_0 models (Bonsai): WHISPER_PRISMML_LLAMA_BIN=~/.local/share/careless-whisper/prismml-llama-server
 EOFCONF
     # If a local model was downloaded, write it into the fresh config
     if [ -n "${LOCAL_MODEL_PATH}" ] && [ -f "${LOCAL_MODEL_PATH}" ]; then
         printf 'WHISPER_LOCAL_MODEL="%s"\nWHISPER_PP_BACKEND=local\n' "${LOCAL_MODEL_PATH}" >> "${CONFIG_FILE}"
+    fi
+    if [ -x "${PRISMML_LLAMA_BIN:-}" ]; then
+        printf 'WHISPER_PRISMML_LLAMA_BIN="%s"\n' "${PRISMML_LLAMA_BIN}" >> "${CONFIG_FILE}"
     fi
     echo "==> Created config: ${CONFIG_FILE}"
 else
@@ -285,6 +289,14 @@ else
             sed -i '' "s|^WHISPER_LOCAL_MODEL=.*|WHISPER_LOCAL_MODEL=\"${LOCAL_MODEL_PATH}\"|" "${CONFIG_FILE}"
         else
             printf 'WHISPER_LOCAL_MODEL="%s"\n' "${LOCAL_MODEL_PATH}" >> "${CONFIG_FILE}"
+        fi
+    fi
+    # Update PrismML llama-server path if built
+    if [ -x "${PRISMML_LLAMA_BIN:-}" ]; then
+        if grep -q "^WHISPER_PRISMML_LLAMA_BIN=" "${CONFIG_FILE}"; then
+            sed -i '' "s|^WHISPER_PRISMML_LLAMA_BIN=.*|WHISPER_PRISMML_LLAMA_BIN=\"${PRISMML_LLAMA_BIN}\"|" "${CONFIG_FILE}"
+        else
+            printf 'WHISPER_PRISMML_LLAMA_BIN="%s"\n' "${PRISMML_LLAMA_BIN}" >> "${CONFIG_FILE}"
         fi
     fi
     # Update hotkeys — append if not present yet
@@ -477,7 +489,8 @@ echo
 
 echo "==> Local AI post-processing (fully offline, via llama.cpp)"
 echo
-select_menu LOCAL_MODEL_CHOICE 1 \
+select_menu LOCAL_MODEL_CHOICE 2 \
+    "Bonsai-8B     (~1.2 GB)  — 1-bit, 8 GB RAM (needs PrismML llama.cpp fork)" \
     "Llama-3.2-3B  (~1.9 GB)  — Fast, 8 GB RAM" \
     "Qwen2.5-7B    (~4.5 GB)  — Balanced, 16 GB RAM  ← recommended" \
     "Qwen2.5-14B   (~9 GB)    — Best quality, 32 GB RAM" \
@@ -488,13 +501,15 @@ LOCAL_MODEL_ID=""
 LOCAL_MODEL_FILE=""
 LOCAL_MODEL_URL=""
 case "${LOCAL_MODEL_CHOICE}" in
-    0) LOCAL_MODEL_ID="Llama-3.2-3B";  LOCAL_MODEL_FILE="Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+    0) LOCAL_MODEL_ID="Bonsai-8B";  LOCAL_MODEL_FILE="Bonsai-8B.gguf"
+       LOCAL_MODEL_URL="https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf" ;;
+    1) LOCAL_MODEL_ID="Llama-3.2-3B";  LOCAL_MODEL_FILE="Llama-3.2-3B-Instruct-Q4_K_M.gguf"
        LOCAL_MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf" ;;
-    1) LOCAL_MODEL_ID="Qwen2.5-7B";  LOCAL_MODEL_FILE="Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+    2) LOCAL_MODEL_ID="Qwen2.5-7B";  LOCAL_MODEL_FILE="Qwen2.5-7B-Instruct-Q4_K_M.gguf"
        LOCAL_MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf" ;;
-    2) LOCAL_MODEL_ID="Qwen2.5-14B"; LOCAL_MODEL_FILE="Qwen2.5-14B-Instruct-Q4_K_M.gguf"
+    3) LOCAL_MODEL_ID="Qwen2.5-14B"; LOCAL_MODEL_FILE="Qwen2.5-14B-Instruct-Q4_K_M.gguf"
        LOCAL_MODEL_URL="https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-Q4_K_M.gguf" ;;
-    3) ;;
+    4) ;;
     *) echo "    Invalid choice, skipping." ;;
 esac
 
@@ -515,6 +530,45 @@ if [ -n "${LOCAL_MODEL_ID}" ]; then
             echo "    ./whisper.sh download-local-model ${LOCAL_MODEL_ID}"
             LOCAL_MODEL_PATH=""
         fi
+    fi
+fi
+
+# ── Build PrismML llama.cpp fork for Bonsai Q1_0 models ─────────────────────
+
+PRISMML_LLAMA_BIN="${HOME}/.local/share/careless-whisper/prismml-llama-server"
+
+if [ "${LOCAL_MODEL_ID}" = "Bonsai-8B" ]; then
+    if [ -x "${PRISMML_LLAMA_BIN}" ]; then
+        echo "    PrismML llama-server already built: ${PRISMML_LLAMA_BIN}"
+    else
+        # cmake is required to build the fork
+        if ! command -v cmake >/dev/null 2>&1; then
+            echo "    cmake not found — installing via Homebrew..."
+            brew install cmake
+        fi
+        echo "==> Building PrismML llama.cpp fork (Q1_0 kernel support for Bonsai)..."
+        PRISMML_BUILD_DIR="$(mktemp -d)"
+        (
+            set -e
+            cd "${PRISMML_BUILD_DIR}"
+            git clone --depth 1 https://github.com/PrismML-Eng/llama.cpp prismml-llama
+            cd prismml-llama
+            cmake -B build && cmake --build build -j
+            DEST_DIR="$(dirname "${PRISMML_LLAMA_BIN}")"
+            mkdir -p "${DEST_DIR}"
+            cp build/bin/llama-server "${PRISMML_LLAMA_BIN}"
+            # Copy shared libraries that the binary needs at runtime
+            find build/bin build/src build/ggml/src -name '*.dylib' -exec cp {} "${DEST_DIR}/" \; 2>/dev/null || true
+            # Fix rpath so the binary finds libs next to itself
+            install_name_tool -add_rpath @executable_path "${PRISMML_LLAMA_BIN}" 2>/dev/null || true
+        )
+        if [ -x "${PRISMML_LLAMA_BIN}" ]; then
+            echo "    Built: ${PRISMML_LLAMA_BIN}"
+        else
+            echo "    ERROR: PrismML fork build failed. Bonsai model won't work."
+            echo "    You can build manually: https://github.com/PrismML-Eng/llama.cpp"
+        fi
+        rm -rf "${PRISMML_BUILD_DIR}"
     fi
 fi
 echo

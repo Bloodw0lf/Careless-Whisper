@@ -403,40 +403,41 @@ local function build_menu()
     }
     menu[#menu + 1] = { title = "-" }
 
-    -- Post-processing: only show mode selector if authenticated
+    -- Post-processing mode selector (always visible — works with all backends)
+    local pp_mode = read_conf("WHISPER_POST_PROCESS", "off")
+    local pp_backend = read_conf("WHISPER_PP_BACKEND", "copilot")
+    local pp_modes = {
+        { id = "off",        label = "Off (raw transcript)" },
+        { id = "clean",      label = "Clean (remove fillers)" },
+        { id = "message",    label = "Messenger (WebEx/Teams)" },
+        { id = "email",      label = "Email (Structures the intent)" },
+        { id = "prompt",     label = "Prompt (light cleanup)" },
+        { id = "prompt-pro", label = "Prompt Pro (Heavy Prompt-Engineering)" },
+    }
+    local pp_submenu = {}
+    for _, m in ipairs(pp_modes) do
+        local is_active = (m.id == pp_mode)
+        local captured_id = m.id
+        local captured_label = m.label
+        pp_submenu[#pp_submenu + 1] = {
+            title = (is_active and "✓ " or "   ") .. m.label,
+            fn = function()
+                if not is_active then
+                    update_conf_value("WHISPER_POST_PROCESS", captured_id)
+                    alert("Post-process → " .. captured_label)
+                end
+            end,
+            disabled = is_active,
+        }
+    end
+    local pp_display = pp_mode == "off" and "Off" or pp_mode:sub(1,1):upper() .. pp_mode:sub(2)
+    menu[#menu + 1] = {
+        title = "Post-process: " .. pp_display,
+        menu = pp_submenu,
+    }
+    -- Show Copilot sign-in option when backend is copilot but no token exists
     local has_token = has_copilot_token()
-    if has_token then
-        local pp_mode = read_conf("WHISPER_POST_PROCESS", "off")
-        local pp_modes = {
-            { id = "off",        label = "Off (raw transcript)" },
-            { id = "clean",      label = "Clean (remove fillers)" },
-            { id = "message",    label = "Messenger (WebEx/Teams)" },
-            { id = "email",      label = "Email (Structures the intent)" },
-            { id = "prompt",     label = "Prompt (light cleanup)" },
-            { id = "prompt-pro", label = "Prompt Pro (Heavy Prompt-Engineering)" },
-        }
-        local pp_submenu = {}
-        for _, m in ipairs(pp_modes) do
-            local is_active = (m.id == pp_mode)
-            local captured_id = m.id
-            local captured_label = m.label
-            pp_submenu[#pp_submenu + 1] = {
-                title = (is_active and "✓ " or "   ") .. m.label,
-                fn = function()
-                    if not is_active then
-                        update_conf_value("WHISPER_POST_PROCESS", captured_id)
-                        alert("Post-process → " .. captured_label)
-                    end
-                end,
-                disabled = is_active,
-            }
-        end
-        local pp_display = pp_mode == "off" and "Off" or pp_mode:sub(1,1):upper() .. pp_mode:sub(2)
-        menu[#menu + 1] = {
-            title = "Post-process: " .. pp_display,
-            menu = pp_submenu,
-        }
-    else
+    if pp_backend == "copilot" and not has_token then
         menu[#menu + 1] = {
             title = "Sign in to GitHub Copilot…",
             fn = function()
@@ -445,7 +446,9 @@ local function build_menu()
                 local task = hs.task.new(whisper_script, function(exitCode, stdout, stderr)
                     if exitCode == 0 and stdout and stdout:match("AUTH_OK") then
                         alert("✓ Copilot authenticated!")
-                        update_conf_value("WHISPER_POST_PROCESS", "clean")
+                        if pp_mode == "off" then
+                            update_conf_value("WHISPER_POST_PROCESS", "clean")
+                        end
                     else
                         local err = (stderr or ""):match("ERROR: (.+)")
                         alert(err or "Authentication failed")
@@ -453,7 +456,6 @@ local function build_menu()
                 end, { "auth" })
                 task:start()
 
-                -- Give the task a moment to request the code and copy to clipboard, then open browser
                 hs.timer.doAfter(2, function()
                     hs.urlevent.openURL("https://github.com/login/device")
                 end)

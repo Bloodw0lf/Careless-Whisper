@@ -115,11 +115,12 @@ brew install llama.cpp
 
 **Download a model:**
 
-| Tier     | Model        | Size (Q4_K_M) | Use case                            |
-| -------- | ------------ | ------------- | ----------------------------------- |
-| Fast     | Llama-3.2-3B | ~1.9 GB       | clean, message — filler removal     |
-| Balanced | Qwen2.5-7B   | ~4.5 GB       | All modes including email/prompt    |
-| Quality  | Qwen2.5-14B  | ~9 GB         | Longer transcripts, polished output |
+| Tier     | Model        | Size           | Use case                                       |
+| -------- | ------------ | -------------- | ---------------------------------------------- |
+| Tiny     | Bonsai-8B    | ~1.2 GB (Q1_0) | 1-bit 8B — all modes, auto-builds PrismML fork |
+| Fast     | Llama-3.2-3B | ~1.9 GB (Q4)   | clean, message — filler removal                |
+| Balanced | Qwen2.5-7B   | ~4.5 GB (Q4)   | All modes including email/prompt               |
+| Quality  | Qwen2.5-14B  | ~9 GB (Q4)     | Longer transcripts, polished output            |
 
 Models can be downloaded automatically via:
 
@@ -128,6 +129,10 @@ Models can be downloaded automatically via:
 - **CLI**: `./whisper.sh download-local-model Qwen2.5-7B`
 
 Or download GGUFs manually from [bartowski](https://huggingface.co/bartowski) on Hugging Face (use Q4_K_M quantization).
+
+> **Bonsai-8B** uses Q1_0 quantization which requires the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp).
+> The installer and panel download will build it automatically to `~/.local/share/careless-whisper/prismml-llama-server`.
+> The standard Homebrew `llama-server` is used for all other models.
 
 **Configure:**
 
@@ -169,29 +174,30 @@ English-only variants (`.en.bin`) are also available from [Hugging Face](https:/
 
 All settings live in `whisper-stt.conf` (created by the installer, gitignored):
 
-| Variable                   | Default                          | Description                                |
-| -------------------------- | -------------------------------- | ------------------------------------------ |
-| `WHISPER_MODEL_PATH`       | `models/ggml-large-v3-turbo.bin` | Active model (or use menubar)              |
-| `WHISPER_LANGUAGE`         | `auto`                           | Language code or `auto`                    |
-| `WHISPER_TRANSLATE`        | `0`                              | `1` = translate everything to English      |
-| `WHISPER_AUTO_PASTE`       | `1`                              | Auto-paste after transcription             |
-| `WHISPER_AUTO_ENTER`       | `0`                              | Press Enter after paste (for LLM chats)    |
-| `WHISPER_AUDIO_DEVICE`     | `default`                        | macOS input device (or AVFoundation index) |
-| `WHISPER_MAX_SECONDS`      | `7200`                           | Max recording length                       |
-| `WHISPER_HISTORY_MAX`      | `10`                             | Entries kept in history                    |
-| `WHISPER_NOTIFICATIONS`    | `1`                              | `0` = disable notifications                |
-| `WHISPER_SOUNDS`           | `1`                              | `0` = disable sounds                       |
-| `WHISPER_HOTKEY_TOGGLE`    | `shift,cmd,r`                    | Toggle hotkey                              |
-| `WHISPER_HOTKEY_STOP`      | `shift,cmd,q`                    | Emergency stop hotkey                      |
-| `WHISPER_HOTKEY_PANEL`     | `shift,cmd,w`                    | Panel hotkey                               |
-| `WHISPER_POST_PROCESS`     | `off`                            | Post-processing mode (or use panel)        |
-| `WHISPER_PP_BACKEND`       | `copilot`                        | AI backend: `copilot`, `claude`, `local`   |
-| `WHISPER_CLAUDE_API_KEY`   | —                                | Anthropic API key (for `claude` backend)   |
-| `WHISPER_CLAUDE_MODEL`     | `claude-sonnet-4-20250514`       | Claude model name                          |
-| `WHISPER_LOCAL_MODEL`      | —                                | Path to GGUF file (for `local` backend)    |
-| `WHISPER_LOCAL_URL`        | `http://127.0.0.1:8085`          | llama-server API URL                       |
-| `WHISPER_LOCAL_GPU_LAYERS` | `99`                             | GPU layers to offload (Metal)              |
-| `WHISPER_LOCAL_CTX`        | `8192`                           | Context window size                        |
+| Variable                    | Default                                   | Description                                |
+| --------------------------- | ----------------------------------------- | ------------------------------------------ |
+| `WHISPER_MODEL_PATH`        | `models/ggml-large-v3-turbo.bin`          | Active model (or use menubar)              |
+| `WHISPER_LANGUAGE`          | `auto`                                    | Language code or `auto`                    |
+| `WHISPER_TRANSLATE`         | `0`                                       | `1` = translate everything to English      |
+| `WHISPER_AUTO_PASTE`        | `1`                                       | Auto-paste after transcription             |
+| `WHISPER_AUTO_ENTER`        | `0`                                       | Press Enter after paste (for LLM chats)    |
+| `WHISPER_AUDIO_DEVICE`      | `default`                                 | macOS input device (or AVFoundation index) |
+| `WHISPER_MAX_SECONDS`       | `7200`                                    | Max recording length                       |
+| `WHISPER_HISTORY_MAX`       | `10`                                      | Entries kept in history                    |
+| `WHISPER_NOTIFICATIONS`     | `1`                                       | `0` = disable notifications                |
+| `WHISPER_SOUNDS`            | `1`                                       | `0` = disable sounds                       |
+| `WHISPER_HOTKEY_TOGGLE`     | `shift,cmd,r`                             | Toggle hotkey                              |
+| `WHISPER_HOTKEY_STOP`       | `shift,cmd,q`                             | Emergency stop hotkey                      |
+| `WHISPER_HOTKEY_PANEL`      | `shift,cmd,w`                             | Panel hotkey                               |
+| `WHISPER_POST_PROCESS`      | `off`                                     | Post-processing mode (or use panel)        |
+| `WHISPER_PP_BACKEND`        | `copilot`                                 | AI backend: `copilot`, `claude`, `local`   |
+| `WHISPER_CLAUDE_API_KEY`    | —                                         | Anthropic API key (for `claude` backend)   |
+| `WHISPER_CLAUDE_MODEL`      | `claude-sonnet-4-20250514`                | Claude model name                          |
+| `WHISPER_LOCAL_MODEL`       | —                                         | Path to GGUF file (for `local` backend)    |
+| `WHISPER_LOCAL_URL`         | `http://127.0.0.1:8085`                   | llama-server API URL                       |
+| `WHISPER_LOCAL_GPU_LAYERS`  | `99`                                      | GPU layers to offload (Metal)              |
+| `WHISPER_LOCAL_CTX`         | `8192`                                    | Context window size                        |
+| `WHISPER_PRISMML_LLAMA_BIN` | `~/.local/share/.../prismml-llama-server` | PrismML fork binary for Bonsai Q1_0        |
 
 ## Uninstall
 

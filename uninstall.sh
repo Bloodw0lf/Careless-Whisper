@@ -67,6 +67,27 @@ fi
 echo "    Done"
 echo
 
+# ── Remove PrismML llama.cpp fork (Bonsai support) ──────────────────────────
+
+PRISMML_DIR="${HOME}/.local/share/careless-whisper"
+if [ -d "${PRISMML_DIR}" ]; then
+    read -rp "    Remove PrismML llama-server + libs (${PRISMML_DIR})? [y/N]: " REMOVE_PRISMML
+    if [[ "${REMOVE_PRISMML}" =~ ^[Yy]$ ]]; then
+        rm -rf "${PRISMML_DIR}"
+        echo "    Removed PrismML artifacts"
+    else
+        echo "    Kept PrismML artifacts"
+    fi
+fi
+
+# ── Remove llama-server runtime files ────────────────────────────────────────
+
+for tmpdir in "${TMPDIR:-}" /tmp; do
+    [ -z "${tmpdir}" ] && continue
+    rm -f "${tmpdir}/llama-server.pid" \
+          "${tmpdir}/llama-server.log"
+done
+
 # ── Optionally remove Homebrew packages ──────────────────────────────────────
 
 if command -v brew >/dev/null 2>&1; then
