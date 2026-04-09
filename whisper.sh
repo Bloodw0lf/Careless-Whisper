@@ -818,7 +818,7 @@ whisper_server_transcribe() {
 LOCAL_MODELS_DIR="${SCRIPT_DIR}/models"
 
 # Catalog: id|filename|size_label|huggingface_url
-LOCAL_MODEL_CATALOG="Bonsai-8B|Bonsai-8B.gguf|~1.2 GB|https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf
+LOCAL_MODEL_CATALOG="Bonsai-8B|Bonsai-8B.gguf|~1.2 GB · 1-bit experimental|https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf
 Llama-3.2-3B|Llama-3.2-3B-Instruct-Q4_K_M.gguf|~1.9 GB|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf
 Qwen2.5-7B|Qwen2.5-7B-Instruct-Q4_K_M.gguf|~4.5 GB|https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf
 Qwen2.5-14B|Qwen2.5-14B-Instruct-Q4_K_M.gguf|~9 GB|https://huggingface.co/bartowski/Qwen2.5-14B-Instruct-GGUF/resolve/main/Qwen2.5-14B-Instruct-Q4_K_M.gguf"

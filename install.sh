@@ -490,7 +490,7 @@ echo
 echo "==> Local AI post-processing (fully offline, via llama.cpp)"
 echo
 select_menu LOCAL_MODEL_CHOICE 2 \
-    "Bonsai-8B     (~1.2 GB)  — 1-bit, 8 GB RAM (needs PrismML llama.cpp fork)" \
+    "Bonsai-8B (1-Bit Quantized experimental)     (~1.2 GB)  — 1-bit, 8 GB RAM (needs PrismML llama.cpp fork)" \
     "Llama-3.2-3B  (~1.9 GB)  — Fast, 8 GB RAM" \
     "Qwen2.5-7B    (~4.5 GB)  — Balanced, 16 GB RAM  ← recommended" \
     "Qwen2.5-14B   (~9 GB)    — Best quality, 32 GB RAM" \
