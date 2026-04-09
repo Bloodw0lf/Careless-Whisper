@@ -181,23 +181,29 @@ All settings live in `whisper-stt.conf` (created by the installer, gitignored):
 | `WHISPER_TRANSLATE`         | `0`                                       | `1` = translate everything to English      |
 | `WHISPER_AUTO_PASTE`        | `1`                                       | Auto-paste after transcription             |
 | `WHISPER_AUTO_ENTER`        | `0`                                       | Press Enter after paste (for LLM chats)    |
+| `WHISPER_RESTORE_CLIPBOARD` | `0`                                       | Restore clipboard after auto-paste         |
 | `WHISPER_AUDIO_DEVICE`      | `default`                                 | macOS input device (or AVFoundation index) |
 | `WHISPER_MAX_SECONDS`       | `7200`                                    | Max recording length                       |
 | `WHISPER_HISTORY_MAX`       | `10`                                      | Entries kept in history                    |
 | `WHISPER_NOTIFICATIONS`     | `1`                                       | `0` = disable notifications                |
 | `WHISPER_SOUNDS`            | `1`                                       | `0` = disable sounds                       |
+| `WHISPER_TRIM_SILENCE`      | `1`                                       | Trim leading/trailing silence from audio   |
 | `WHISPER_HOTKEY_TOGGLE`     | `shift,cmd,r`                             | Toggle hotkey                              |
 | `WHISPER_HOTKEY_STOP`       | `shift,cmd,q`                             | Emergency stop hotkey                      |
 | `WHISPER_HOTKEY_PANEL`      | `shift,cmd,w`                             | Panel hotkey                               |
 | `WHISPER_POST_PROCESS`      | `off`                                     | Post-processing mode (or use panel)        |
 | `WHISPER_PP_BACKEND`        | `copilot`                                 | AI backend: `copilot`, `claude`, `local`   |
+| `WHISPER_COPILOT_MODEL`     | `claude-sonnet-4.6`                       | Copilot model for post-processing          |
 | `WHISPER_CLAUDE_API_KEY`    | —                                         | Anthropic API key (for `claude` backend)   |
-| `WHISPER_CLAUDE_MODEL`      | `claude-sonnet-4-20250514`                | Claude model name                          |
+| `WHISPER_CLAUDE_MODEL`      | `claude-haiku-4-5-20251001`               | Claude model name                          |
 | `WHISPER_LOCAL_MODEL`       | —                                         | Path to GGUF file (for `local` backend)    |
 | `WHISPER_LOCAL_URL`         | `http://127.0.0.1:8085`                   | llama-server API URL                       |
 | `WHISPER_LOCAL_GPU_LAYERS`  | `99`                                      | GPU layers to offload (Metal)              |
 | `WHISPER_LOCAL_CTX`         | `8192`                                    | Context window size                        |
 | `WHISPER_PRISMML_LLAMA_BIN` | `~/.local/share/.../prismml-llama-server` | PrismML fork binary for Bonsai Q1_0        |
+| `WHISPER_CUSTOM_VOCAB`      | —                                         | Spelling hints for domain terms            |
+| `WHISPER_HISTORY_FILE`      | `history.txt`                             | Path to transcription log                  |
+| `WHISPER_DEV_TIMINGS`       | `0`                                       | `1` = append timing breakdown to output    |
 
 ## Uninstall
 
@@ -205,7 +211,7 @@ All settings live in `whisper-stt.conf` (created by the installer, gitignored):
 ./uninstall.sh
 ```
 
-Removes Hammerspoon integration and temp files. Optionally uninstalls Homebrew packages (asks per package). The repo directory is kept.
+Removes Hammerspoon integration, temp files, and optionally the PrismML llama-server (`~/.local/share/careless-whisper/`). Also offers to uninstall Homebrew packages (asks per package). The repo directory is kept.
 
 ## Updates
 
@@ -234,6 +240,11 @@ The update pulls the latest changes from git, re-patches paths, and reloads Hamm
                                ├─ copy to clipboard
                                └─ auto-paste via AppleScript
                     └─ [if auto-enter] simulate Return key
+```
+
+## Troubleshooting
+
+| Problem                     | Solution                                                                     |
 | --------------------------- | ---------------------------------------------------------------------------- |
 | Hotkey does nothing         | Reload Hammerspoon config (menubar → Reload Config)                          |
 | No audio captured           | Run `./whisper.sh list-devices`, set `WHISPER_AUDIO_DEVICE`                  |
@@ -261,18 +272,27 @@ Careless-Whisper/ # Repository
 Generated locally (gitignored):
 ├── whisper-stt.conf # User configuration
 ├── history.txt # Rolling transcription log
-└── models/ # Downloaded GGML model files
-└── ggml-\*.bin
+└── models/ # Downloaded model files
+    ├── ggml-*.bin       # Whisper speech-to-text models
+    └── *.gguf           # Local LLM models (GGUF format)
 
 ````
 
 ## Manual Testing
 
 ```bash
-./whisper.sh status         # current state + version
-./whisper.sh check-update   # check for available updates
-./whisper.sh list-devices   # available audio inputs
-./whisper.sh start          # start recording
-./whisper.sh stop           # stop + transcribe
-bash -n whisper.sh          # syntax check
-````
+./whisper.sh status                        # current state + version
+./whisper.sh toggle                        # start or stop+transcribe
+./whisper.sh start                         # start recording
+./whisper.sh stop                          # stop + transcribe
+./whisper.sh list-devices                  # available audio inputs
+./whisper.sh list-models                   # whisper models (installed/available)
+./whisper.sh list-local-models             # local LLM models
+./whisper.sh download-model <name.bin>     # download whisper model
+./whisper.sh download-local-model <id>     # download local model (Bonsai-8B, Qwen2.5-7B, ...)
+./whisper.sh local-server start|stop|status  # manage llama-server
+./whisper.sh auth                          # GitHub Copilot OAuth sign-in
+./whisper.sh check-update                  # check for available updates
+./whisper.sh self-update                   # update in place
+bash -n whisper.sh                         # syntax check
+```
