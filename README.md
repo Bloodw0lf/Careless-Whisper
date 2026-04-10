@@ -77,15 +77,20 @@ Choose your AI backend in the settings panel under **AI Backend**:
 
 | Backend               | Requirement          | Config                                 |
 | --------------------- | -------------------- | -------------------------------------- |
+| **None**              | —                    | `WHISPER_PP_BACKEND=none`              |
 | **GitHub Copilot**    | Copilot subscription | `WHISPER_PP_BACKEND=copilot` (default) |
 | **Claude API**        | Anthropic API key    | `WHISPER_PP_BACKEND=claude`            |
 | **Local (llama.cpp)** | llama-server running | `WHISPER_PP_BACKEND=local`             |
+
+#### None
+
+Disables AI post-processing entirely. The Post Processing section is hidden when this backend is selected. Raw transcripts are pasted as-is.
 
 #### GitHub Copilot
 
 Uses the Copilot API (same as VS Code). Authentication via GitHub OAuth Device Flow.
 
-- **Panel:** Click "Sign in to GitHub Copilot" when Copilot backend is selected
+- **Panel:** Select "GitHub Copilot" as backend — if no token is found, a "Sign in" button appears inline. Clicking it starts the device flow: a pairing code is copied to your clipboard, and GitHub opens in your browser. Just paste the code when prompted. On success, a green confirmation appears in the panel.
 - **Installer:** Run `./install.sh` — prompts for authentication during setup
 - **Manual:** Set `GITHUB_COPILOT_TOKEN` environment variable
 
@@ -192,7 +197,7 @@ All settings live in `whisper-stt.conf` (created by the installer, gitignored):
 | `WHISPER_HOTKEY_STOP`       | `shift,cmd,q`                             | Emergency stop hotkey                      |
 | `WHISPER_HOTKEY_PANEL`      | `shift,cmd,w`                             | Panel hotkey                               |
 | `WHISPER_POST_PROCESS`      | `off`                                     | Post-processing mode (or use panel)        |
-| `WHISPER_PP_BACKEND`        | `copilot`                                 | AI backend: `copilot`, `claude`, `local`   |
+| `WHISPER_PP_BACKEND`        | `copilot`                                 | AI backend: `none`, `copilot`, `claude`, `local`   |
 | `WHISPER_COPILOT_MODEL`     | `claude-sonnet-4.6`                       | Copilot model for post-processing          |
 | `WHISPER_CLAUDE_API_KEY`    | —                                         | Anthropic API key (for `claude` backend)   |
 | `WHISPER_CLAUDE_MODEL`      | `claude-haiku-4-5-20251001`               | Claude model name                          |
@@ -276,7 +281,7 @@ Generated locally (gitignored):
     ├── ggml-*.bin       # Whisper speech-to-text models
     └── *.gguf           # Local LLM models (GGUF format)
 
-````
+```
 
 ## Manual Testing
 

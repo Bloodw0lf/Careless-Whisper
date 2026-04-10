@@ -152,16 +152,37 @@ local function handle_message(msg)
         elseif cmd == "auth" then
             -- Start device flow
             hs.alert.show("Authenticating with GitHub…")
+            local authUserCode = nil
+            local authOk = false
             local task = hs.task.new(bridge.whisper_script, function(exitCode, stdout, stderr)
-                if exitCode == 0 and stdout and stdout:match("AUTH_OK") then
+                if authOk then
                     hs.alert.show("✓ Copilot authenticated!")
                     bridge.update_conf_value("WHISPER_POST_PROCESS", "clean")
-                    M.pushAuth()
-                    M.pushSettings()
+                    eval_js("showAuthSuccess()")
+                    hs.timer.doAfter(3, function()
+                        M.pushAuth()
+                        M.pushSettings()
+                    end)
                 else
                     local err = (stderr or ""):match("ERROR: (.+)")
                     hs.alert.show(err or "Authentication failed")
                 end
+            end, function(task, stdoutChunk, stderrChunk)
+                -- Streaming callback: capture output as it arrives
+                if stdoutChunk then
+                    if not authUserCode then
+                        local code = stdoutChunk:match("USER_CODE=(%S+)")
+                        if code then
+                            authUserCode = code
+                            hs.alert.show("Code " .. code .. " copied to clipboard — paste it on GitHub", 8)
+                            eval_js("updateAuth(" .. json_encode({ authenticated = false, userCode = code }) .. ")")
+                        end
+                    end
+                    if stdoutChunk:match("AUTH_OK") then
+                        authOk = true
+                    end
+                end
+                return true
             end, { "auth" })
             if task then
                 task:start()
@@ -212,6 +233,9 @@ local function handle_message(msg)
         if key and value and allowed[key] then
             bridge.update_conf_value(key, value)
             M.pushSettings()
+            if key == "WHISPER_PP_BACKEND" then
+                M.pushAuth()
+            end
         end
 
     elseif action == "setModel" then

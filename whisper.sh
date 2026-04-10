@@ -59,7 +59,7 @@ WHISPER_DEV_TIMINGS="${WHISPER_DEV_TIMINGS:-0}"
 
 # Post-processing mode: off | clean | message | email | prompt | prompt-pro
 WHISPER_POST_PROCESS="${WHISPER_POST_PROCESS:-off}"
-# Post-processing backend: copilot | claude | local
+# Post-processing backend: none | copilot | claude | local
 WHISPER_PP_BACKEND="${WHISPER_PP_BACKEND:-copilot}"
 # Copilot model for post-processing (via /chat/completions).
 # Verified working: claude-opus-4.5, claude-opus-4.6, claude-sonnet-4.6,
@@ -383,6 +383,7 @@ post_process_text() {
 
     local backend="${WHISPER_PP_BACKEND:-copilot}"
     case "${backend}" in
+        none)    return 0 ;;
         copilot) pp_via_copilot  "${raw_text}" "${system_prompt}" ;;
         claude)  pp_via_claude   "${raw_text}" "${system_prompt}" ;;
         local)   pp_via_local    "${raw_text}" "${system_prompt}" ;;
@@ -1696,6 +1697,53 @@ check_update() {
     fi
 }
 
+# ── Process arbitrary text through post-processing ───────────────────────────
+# Reads from stdin, runs through the configured (or overridden) PP mode/backend,
+# and writes the result to stdout + clipboard.
+process_text_stdin() {
+    local mode="${2:-${WHISPER_POST_PROCESS}}"
+    if [ "${mode}" = "off" ] || [ -z "${mode}" ]; then
+        mode="clean"
+    fi
+
+    local input_text
+    input_text="$(cat)"
+    if [ -z "${input_text}" ]; then
+        printf 'No input text provided.\n' >&2
+        exit 1
+    fi
+
+    local system_prompt
+    system_prompt="$(post_process_prompt "${mode}")"
+
+    local backend="${WHISPER_PP_BACKEND:-copilot}"
+    local result=""
+
+    # Write input to TEXT_FILE so backend functions can use it
+    printf '%s' "${input_text}" > "${TEXT_FILE}"
+
+    case "${backend}" in
+        copilot) pp_via_copilot "${input_text}" "${system_prompt}" ;;
+        claude)  pp_via_claude  "${input_text}" "${system_prompt}" ;;
+        local)   pp_via_local   "${input_text}" "${system_prompt}" ;;
+        *)
+            printf 'Unknown backend: %s\n' "${backend}" >&2
+            exit 1
+            ;;
+    esac
+
+    result="$(cat "${TEXT_FILE}" 2>/dev/null || true)"
+    if [ -n "${result}" ]; then
+        # Copy to clipboard
+        copy_to_clipboard "${TEXT_FILE}"
+        # Output to stdout
+        printf '%s' "${result}"
+    else
+        # If processing failed, return original text
+        printf '%s' "${input_text}"
+    fi
+}
+
 case "${ACTION}" in
     start)
         start_recording
@@ -1745,8 +1793,14 @@ case "${ACTION}" in
     download-local-model)
         download_local_model "$@"
         ;;
+    process-text)
+        # Process text from stdin through post-processing pipeline.
+        # Usage: echo "some text" | whisper.sh process-text [mode]
+        #   mode: clean|message|email|prompt|prompt-pro (default: use config)
+        process_text_stdin "$@"
+        ;;
     *)
-        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|list-local-models|download-local-model|auth|status|check-update|self-update|local-server\n' "$0" >&2
+        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|list-local-models|download-local-model|auth|status|check-update|self-update|local-server|process-text\n' "$0" >&2
         exit 1
         ;;
 esac
