@@ -1,0 +1,3 @@
+- Check if ffmpeg is already fully metal accelerated on Apple
+- Progress bar with percentage during audio processing and AI enhancing for better feeling of progress
+- Maybe a system wide audio Transcription Function for meetings or calls?

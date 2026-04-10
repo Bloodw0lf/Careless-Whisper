@@ -866,7 +866,7 @@ download_local_model() {
         notify "Whisper" "Downloading ${model_id}..." ""
         printf 'downloading:%s\n' "${filename}"
 
-        if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}" 2>&1; then
+        if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}"; then
             mv "${model_path}.part" "${model_path}"
             printf 'done:%s\n' "${filename}"
             notify "Whisper" "Model ${model_id} downloaded" "Glass"
@@ -912,6 +912,172 @@ download_local_model() {
             printf 'prismml_failed\n'
         fi
         rm -rf "${build_dir}"
+    fi
+}
+
+# ── Import custom HuggingFace GGUF model ────────────────────────────────────
+
+validate_gguf_model() {
+    local model_path="$1"
+    local warnings=""
+
+    # Check GGUF magic header (first 4 bytes = "GGUF")
+    local magic
+    magic="$(head -c 4 "${model_path}" 2>/dev/null)"
+    if [ "${magic}" != "GGUF" ]; then
+        printf 'error:not a valid GGUF file\n'
+        return 1
+    fi
+
+    # Extract quantization type from filename
+    local filename
+    filename="$(basename "${model_path}")"
+    local quant
+    quant="$(printf '%s' "${filename}" | grep -oE 'Q[0-9][_.][0-9A-Z_]+|[FIQB][0-9]+[_.][0-9A-Z]*|F16|F32|BF16' | head -1)"
+
+    # Warn about quantizations that need CUDA or are unsupported on Metal
+    case "${quant}" in
+        *IQ1_M*|*IQ1_S*)
+            warnings="${warnings}warn:IQ1 quantization may be very slow on Metal\n"
+            ;;
+        *Q1_0*)
+            warnings="${warnings}warn:Q1_0 requires PrismML llama.cpp fork\n"
+            ;;
+    esac
+
+    # Check file size vs available system RAM
+    local file_bytes system_bytes
+    file_bytes="$(stat -f%z "${model_path}" 2>/dev/null || stat -c%s "${model_path}" 2>/dev/null || echo 0)"
+    system_bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+
+    if [ "${system_bytes}" -gt 0 ] 2>/dev/null && [ "${file_bytes}" -gt 0 ] 2>/dev/null; then
+        # Model needs roughly 1.2x file size in RAM (KV cache + overhead)
+        local estimated_ram
+        estimated_ram="$(python3 -c "print(int(${file_bytes} * 1.2))")"
+        # Warn if model would use more than 75% of system RAM
+        local threshold
+        threshold="$(python3 -c "print(int(${system_bytes} * 0.75))")"
+        if [ "${estimated_ram}" -gt "${threshold}" ]; then
+            local ram_gb model_gb
+            ram_gb="$(python3 -c "print(f'{${system_bytes}/1073741824:.0f}')")"
+            model_gb="$(python3 -c "print(f'{${estimated_ram}/1073741824:.1f}')")"
+            warnings="${warnings}warn:model needs ~${model_gb} GB RAM (system has ${ram_gb} GB)\n"
+        fi
+    fi
+
+    # Check if llama-server can at least identify the file
+    local llama_bin
+    llama_bin="$(find_bin llama-server)"
+    if [ -z "${llama_bin}" ]; then
+        warnings="${warnings}warn:llama-server not found — install via brew install llama.cpp\n"
+    fi
+
+    if [ -n "${warnings}" ]; then
+        printf '%b' "${warnings}"
+    fi
+    printf 'valid\n'
+    return 0
+}
+
+import_custom_model() {
+    local url="${2:-}"
+    local name="${3:-}"
+
+    if [ -z "${url}" ]; then
+        printf 'error:no URL provided\n' >&2
+        exit 1
+    fi
+
+    # Validate URL is a HuggingFace GGUF link
+    if ! printf '%s' "${url}" | grep -qE '^https://huggingface\.co/.+\.gguf$'; then
+        printf 'error:invalid URL — must be a HuggingFace .gguf link\n' >&2
+        exit 1
+    fi
+
+    # Auto-convert /blob/ browser URLs to /resolve/ download URLs
+    url="$(printf '%s' "${url}" | sed 's|/blob/|/resolve/|')"
+
+    # Extract filename from URL
+    local filename
+    filename="$(basename "${url}")"
+
+    # Use custom name if provided, otherwise derive from filename
+    if [ -z "${name}" ]; then
+        name="$(printf '%s' "${filename}" | sed 's/\.gguf$//' | sed 's/-Q[0-9].*$//' | sed 's/-Instruct//')"
+    fi
+
+    # Pre-download: check file size vs system RAM
+    local size_bytes size_label
+    size_bytes="$(curl -sI -L "${url}" 2>/dev/null | grep -i 'content-length' | tail -1 | awk '{print $2}' | tr -d '\r')"
+    if [ -n "${size_bytes}" ] && [ "${size_bytes}" -gt 0 ] 2>/dev/null; then
+        local size_gb
+        size_gb="$(python3 -c "print(f'~{${size_bytes}/1073741824:.1f} GB')")"
+        size_label="${size_gb}"
+
+        # Pre-download RAM check
+        local system_bytes
+        system_bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+        if [ "${system_bytes}" -gt 0 ] 2>/dev/null; then
+            local max_model
+            max_model="$(python3 -c "print(int(${system_bytes} * 0.75 / 1.2))")"
+            if [ "${size_bytes}" -gt "${max_model}" ]; then
+                local ram_gb est_gb
+                ram_gb="$(python3 -c "print(f'{${system_bytes}/1073741824:.0f}')")"
+                est_gb="$(python3 -c "print(f'{${size_bytes}*1.2/1073741824:.1f}')")"
+                printf 'warn:model needs ~%s GB RAM (system has %s GB) — may be too large\n' "${est_gb}" "${ram_gb}"
+            fi
+        fi
+    else
+        size_label="unknown size"
+    fi
+
+    # Pre-download: check quantization from filename
+    local quant
+    quant="$(printf '%s' "${filename}" | grep -oE 'Q[0-9][_.][0-9A-Z_]+|[FIQB][0-9]+[_.][0-9A-Z]*|F16|F32|BF16' | head -1)"
+    case "${quant}" in
+        *Q1_0*)
+            printf 'warn:Q1_0 quantization requires PrismML llama.cpp fork\n'
+            ;;
+        *IQ1_M*|*IQ1_S*)
+            printf 'warn:IQ1 quantization may be very slow on Metal\n'
+            ;;
+    esac
+
+    local model_path="${LOCAL_MODELS_DIR}/${filename}"
+    if [ -f "${model_path}" ]; then
+        printf 'already_exists:%s|%s|%s\n' "${name}" "${filename}" "${size_label}"
+        exit 0
+    fi
+
+    mkdir -p "${LOCAL_MODELS_DIR}"
+    notify "Whisper" "Downloading ${name}..." ""
+    printf 'downloading:%s|%s|%s|%s\n' "${name}" "${filename}" "${size_label}" "${size_bytes:-0}"
+
+    if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}"; then
+        mv "${model_path}.part" "${model_path}"
+
+        # Post-download: validate the GGUF file
+        local validation
+        validation="$(validate_gguf_model "${model_path}")"
+        if printf '%s' "${validation}" | grep -q '^error:'; then
+            local err_msg
+            err_msg="$(printf '%s' "${validation}" | grep '^error:' | head -1 | sed 's/^error://')"
+            rm -f "${model_path}"
+            printf 'failed:%s — %s\n' "${name}" "${err_msg}" >&2
+            notify "Whisper" "Import failed: ${err_msg}" "Basso"
+            exit 1
+        fi
+
+        # Pass through any warnings
+        printf '%s' "${validation}" | grep '^warn:' || true
+
+        printf 'done:%s|%s|%s\n' "${name}" "${filename}" "${size_label}"
+        notify "Whisper" "Model ${name} imported (${size_label})" "Glass"
+    else
+        rm -f "${model_path}.part"
+        printf 'failed:%s\n' "${name}" >&2
+        notify "Whisper" "Download failed for ${name}" "Basso"
+        exit 1
     fi
 }
 
@@ -1651,7 +1817,7 @@ download_model() {
     notify "Whisper" "Downloading ${model_name}..." ""
     printf 'downloading:%s\n' "${model_name}"
 
-    if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}" 2>&1; then
+    if curl -L --fail --silent --show-error --output "${model_path}.part" "${url}"; then
         mv "${model_path}.part" "${model_path}"
         printf 'done:%s\n' "${model_name}"
         notify "Whisper" "Model ${model_name} downloaded" "Glass"
@@ -1793,6 +1959,20 @@ case "${ACTION}" in
     download-local-model)
         download_local_model "$@"
         ;;
+    import-custom-model)
+        import_custom_model "$@"
+        ;;
+    clear-copilot-token)
+        rm -f "${WHISPER_AUTH_FILE}"
+        printf 'OK\n'
+        ;;
+    clear-claude-key)
+        # Remove WHISPER_CLAUDE_API_KEY from conf
+        if [ -f "${SCRIPT_DIR}/whisper-stt.conf" ]; then
+            sed -i '' '/^WHISPER_CLAUDE_API_KEY=/d' "${SCRIPT_DIR}/whisper-stt.conf"
+        fi
+        printf 'OK\n'
+        ;;
     process-text)
         # Process text from stdin through post-processing pipeline.
         # Usage: echo "some text" | whisper.sh process-text [mode]
@@ -1800,7 +1980,7 @@ case "${ACTION}" in
         process_text_stdin "$@"
         ;;
     *)
-        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|list-local-models|download-local-model|auth|status|check-update|self-update|local-server|process-text\n' "$0" >&2
+        printf 'Usage: %s start|stop|toggle|restart-recording|list-devices|list-models|download-model|list-local-models|download-local-model|import-custom-model|auth|status|check-update|self-update|local-server|process-text|clear-copilot-token|clear-claude-key\n' "$0" >&2
         exit 1
         ;;
 esac

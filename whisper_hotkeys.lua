@@ -6,15 +6,30 @@ local home = os.getenv("HOME")
 local whisper_script = home .. "/Scripts/Careless-Whisper/whisper.sh"
 local conf_file      = home .. "/Scripts/Careless-Whisper/whisper-stt.conf"
 
--- Read a value from whisper-stt.conf
+-- Read a value from whisper-stt.conf (pure Lua, no subprocess)
+local function read_conf_all()
+    local values = {}
+    local f = io.open(conf_file, "r")
+    if not f then return values end
+    for line in f:lines() do
+        -- Skip comments and empty lines
+        if not line:match("^%s*#") and not line:match("^%s*$") then
+            local key, val = line:match("^([%w_]+)=(.*)")
+            if key and val then
+                -- Strip surrounding double quotes
+                val = val:match('^"(.*)"$') or val
+                values[key] = val
+            end
+        end
+    end
+    f:close()
+    return values
+end
+
 local function read_conf(key, default)
     if not key:match("^[%w_]+$") then return default end
-    local handle = io.popen(
-        "bash -c '. " .. conf_file .. " 2>/dev/null && printf \"%s\" \"${" .. key .. ":-}\"'"
-    )
-    if not handle then return default end
-    local val = handle:read("*l")
-    handle:close()
+    local values = read_conf_all()
+    local val = values[key]
     return (val and val ~= "") and val or default
 end
 
@@ -274,9 +289,9 @@ local function start_download_progress(model_name, part_path, kind)
             end
         end
         if kind == "local" then
-            whisper_webview.pushLocalModels()
+            whisper_webview.pushLocalDownloadProgress()
         else
-            whisper_webview.pushModels()
+            whisper_webview.pushDownloadProgress()
         end
     end)
 end
@@ -340,7 +355,8 @@ local function update_conf_value(key, value)
     if not f then return false end
     local lines = {}
     local replaced = false
-    local replacement = key .. '="' .. value .. '"'
+    local safe_value = value:gsub('"', '')
+    local replacement = key .. '="' .. safe_value .. '"'
     for line in f:lines() do
         if not replaced and line:match("^" .. key .. "=") then
             lines[#lines + 1] = replacement
@@ -677,6 +693,23 @@ local function select_local_model(filename)
     alert("Local model → " .. display)
 end
 
+-- Hotkey bindings (must be before webview init so bridge can reference them)
+local hk_toggle = hs.hotkey.bind(toggle_mods, toggle_key, function() run_whisper("toggle") end)
+local hk_stop   = hs.hotkey.bind(stop_mods,   stop_key,   function() run_whisper("stop")   end)
+local hk_panel  = hs.hotkey.bind(panel_mods,  panel_key,  function() whisper_webview.toggle() end)
+
+local function disable_hotkeys()
+    hk_toggle:disable()
+    hk_stop:disable()
+    hk_panel:disable()
+end
+
+local function enable_hotkeys()
+    hk_toggle:enable()
+    hk_stop:enable()
+    hk_panel:enable()
+end
+
 whisper_webview.init({
     whisper_script        = whisper_script,
     script_dir            = script_dir,
@@ -695,6 +728,8 @@ whisper_webview.init({
     get_local_download_progress = get_local_download_progress,
     download_local_model  = download_local_model,
     select_local_model    = select_local_model,
+    disable_hotkeys       = disable_hotkeys,
+    enable_hotkeys        = enable_hotkeys,
     check_update          = function(callback)
         local task = hs.task.new(whisper_script, function(exitCode, stdout, _)
             if exitCode ~= 0 or not stdout then
@@ -751,10 +786,6 @@ whisper_webview.init({
 if status_item then
     status_item:setClickCallback(function() whisper_webview.toggle() end)
 end
-
-hs.hotkey.bind(toggle_mods, toggle_key, function() run_whisper("toggle") end)
-hs.hotkey.bind(stop_mods,   stop_key,   function() run_whisper("stop")   end)
-hs.hotkey.bind(panel_mods,  panel_key,  function() whisper_webview.toggle() end)
 
 -- Audio device change watcher: auto-restart recording when input device changes
 local restart_in_progress = false

@@ -8,6 +8,7 @@ local webview = nil
 local controller = nil
 local bridge = nil       -- callback table from whisper_hotkeys
 local panel_ready = false
+local custom_import_timer = nil
 
 local PANEL_W = 380
 local PANEL_H = 520
@@ -50,6 +51,9 @@ function M.pushSettings()
         WHISPER_PP_BACKEND         = bridge.read_conf("WHISPER_PP_BACKEND", "copilot"),
         WHISPER_CLAUDE_API_KEY     = bridge.read_conf("WHISPER_CLAUDE_API_KEY", ""),
         WHISPER_CUSTOM_VOCAB       = bridge.read_conf("WHISPER_CUSTOM_VOCAB", ""),
+        WHISPER_HOTKEY_TOGGLE      = bridge.read_conf("WHISPER_HOTKEY_TOGGLE", "shift,cmd,r"),
+        WHISPER_HOTKEY_STOP        = bridge.read_conf("WHISPER_HOTKEY_STOP", "shift,cmd,q"),
+        WHISPER_HOTKEY_PANEL       = bridge.read_conf("WHISPER_HOTKEY_PANEL", "shift,cmd,w"),
     }
     eval_js("updateSettings(" .. json_encode(settings) .. ")")
 end
@@ -110,6 +114,19 @@ function M.pushLocalModels()
     eval_js("updateLocalModels(" .. json_encode(data) .. ")")
 end
 
+-- Lightweight: push only download progress without re-listing models from shell
+function M.pushDownloadProgress()
+    if not bridge then return end
+    local downloading = bridge.get_download_progress()
+    eval_js("updateDownloadProgress(" .. json_encode(downloading) .. ")")
+end
+
+function M.pushLocalDownloadProgress()
+    if not bridge then return end
+    local downloading = bridge.get_local_download_progress()
+    eval_js("updateLocalDownloadProgress(" .. json_encode(downloading) .. ")")
+end
+
 function M.pushAll()
     M.pushState()
     M.pushSettings()
@@ -149,6 +166,15 @@ local function handle_message(msg)
         local cmd = data.command
         if cmd == "toggle" or cmd == "stop" then
             bridge.run_whisper(cmd)
+        elseif cmd == "reloadHammerspoon" then
+            hs.alert.show("Reloading…")
+            hs.timer.doAfter(0.5, function() hs.reload() end)
+        elseif cmd == "hotkeyCapture" then
+            if data.active then
+                bridge.disable_hotkeys()
+            else
+                bridge.enable_hotkeys()
+            end
         elseif cmd == "auth" then
             -- Start device flow
             hs.alert.show("Authenticating with GitHub…")
@@ -229,6 +255,9 @@ local function handle_message(msg)
             WHISPER_PP_BACKEND = true,
             WHISPER_CLAUDE_API_KEY = true,
             WHISPER_CUSTOM_VOCAB = true,
+            WHISPER_HOTKEY_TOGGLE = true,
+            WHISPER_HOTKEY_STOP = true,
+            WHISPER_HOTKEY_PANEL = true,
         }
         if key and value and allowed[key] then
             bridge.update_conf_value(key, value)
@@ -268,6 +297,105 @@ local function handle_message(msg)
         if data.text then
             hs.pasteboard.setContents(data.text)
             hs.alert.show("Copied to clipboard")
+        end
+
+    elseif action == "clearCopilotToken" then
+        local task = hs.task.new(bridge.whisper_script, function(exitCode, stdout, _)
+            if exitCode == 0 then
+                hs.alert.show("Copilot token cleared")
+                M.pushAuth()
+                eval_js("updateSystemSettings(" .. json_encode({ copilotCleared = true }) .. ")")
+            end
+        end, { "clear-copilot-token" })
+        if task then task:start() end
+
+    elseif action == "clearClaudeKey" then
+        local task = hs.task.new(bridge.whisper_script, function(exitCode, stdout, _)
+            if exitCode == 0 then
+                hs.alert.show("Claude API key cleared")
+                M.pushSettings()
+                eval_js("updateSystemSettings(" .. json_encode({ claudeCleared = true }) .. ")")
+            end
+        end, { "clear-claude-key" })
+        if task then task:start() end
+
+    elseif action == "importCustomModel" then
+        if data.url then
+            local args = { "import-custom-model", data.url }
+            if data.name and data.name ~= "" then
+                args[#args + 1] = data.name
+            end
+            hs.alert.show("Importing model…")
+            local importWarnings = {}
+            local importDone = false
+            local importExists = false
+            local task = hs.task.new(bridge.whisper_script, function(exitCode, stdout, stderr)
+                -- Stop progress timer
+                if custom_import_timer then
+                    custom_import_timer:stop()
+                    custom_import_timer = nil
+                end
+                if exitCode == 0 and (importDone or (stdout or ""):match("done:")) then
+                    local msg = "✓ Model imported"
+                    if #importWarnings > 0 then
+                        msg = msg .. " (with warnings)"
+                    end
+                    hs.alert.show(msg)
+                    eval_js("updateSystemSettings(" .. json_encode({ importDone = true, importWarnings = importWarnings }) .. ")")
+                elseif importExists or (stdout or ""):match("already_exists:") then
+                    hs.alert.show("Model already exists")
+                    eval_js("updateSystemSettings(" .. json_encode({ importDone = true }) .. ")")
+                else
+                    local err = (stderr or ""):match("error:(.+)")
+                    hs.alert.show(err or "Import failed")
+                    eval_js("updateSystemSettings(" .. json_encode({ importError = err or "Import failed", importWarnings = importWarnings }) .. ")")
+                end
+                M.pushLocalModels()
+            end, function(task, stdoutChunk, stderrChunk)
+                -- Streaming: capture status flags, warnings, and start download progress
+                if stdoutChunk then
+                    if stdoutChunk:match("done:") then importDone = true end
+                    if stdoutChunk:match("already_exists:") then importExists = true end
+                    for w in stdoutChunk:gmatch("warn:([^\n]+)") do
+                        importWarnings[#importWarnings + 1] = w
+                        hs.alert.show("⚠ " .. w, 4)
+                    end
+                    -- Capture downloading line and start progress timer
+                    local dl_name, dl_file, dl_label, dl_total = stdoutChunk:match("downloading:([^|]+)|([^|]+)|([^|]+)|([^\n]+)")
+                    if dl_file then
+                        local part_path = bridge.script_dir .. "/models/" .. dl_file .. ".part"
+                        local total_bytes = tonumber(dl_total) or 0
+                        if custom_import_timer then custom_import_timer:stop() end
+                        custom_import_timer = hs.timer.doEvery(1.5, function()
+                            local f = io.open(part_path, "r")
+                            if f then
+                                local size = f:seek("end")
+                                f:close()
+                                if size then
+                                    local mb = size / (1024 * 1024)
+                                    local progress_text
+                                    if mb >= 1024 then
+                                        progress_text = string.format("%.1f GB", mb / 1024)
+                                    else
+                                        progress_text = string.format("%.0f MB", mb)
+                                    end
+                                    local pct = 0
+                                    if total_bytes > 0 then
+                                        pct = math.min(100, math.floor(size / total_bytes * 100))
+                                    end
+                                    eval_js("updateSystemSettings(" .. json_encode({
+                                        importProgress = progress_text,
+                                        importTotal = dl_label,
+                                        importPct = pct,
+                                    }) .. ")")
+                                end
+                            end
+                        end)
+                    end
+                end
+                return true
+            end, args)
+            if task then task:start() end
         end
     end
 end
@@ -336,6 +464,8 @@ function M.toggle()
     if webview then
         if webview:isVisible() then
             webview:hide()
+            -- Safety: re-enable hotkeys in case capture was active
+            bridge.enable_hotkeys()
         else
             webview:frame(panel_frame())
             webview:show()
@@ -358,6 +488,10 @@ end
 
 function M.destroy()
     panel_ready = false
+    if custom_import_timer then
+        custom_import_timer:stop()
+        custom_import_timer = nil
+    end
     if webview then
         webview:delete()
         webview = nil

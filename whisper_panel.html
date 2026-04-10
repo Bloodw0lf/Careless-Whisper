@@ -6,7 +6,7 @@
     <title>Careless Whisper</title>
     <style>
       :root {
-        --bg: #272727;
+        --bg: #1e1e1e;
         --bg-section: #16213e;
         --bg-hover: #1e2a4a;
         --bg-active: #253552;
@@ -51,11 +51,11 @@
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: var(--border);
+        background: #555;
         border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: var(--text-dim);
+        background: #777;
       }
 
       /* ── Layout ── */
@@ -193,6 +193,173 @@
       .btn:disabled:hover {
         background: var(--bg-section);
         transform: none;
+      }
+
+      /* ── System Settings Bar ── */
+      .system-bar {
+        margin-top: 8px;
+        border-top: 1px solid var(--border);
+        padding-top: 8px;
+      }
+      .system-bar .section {
+        background: transparent;
+        border: none;
+      }
+      .system-bar .section-header {
+        padding: 6px 14px;
+      }
+      .system-bar .section-title {
+        font-size: 10px;
+        color: var(--text-dim);
+      }
+      .sys-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 14px;
+      }
+      .sys-label {
+        font-size: 11px;
+        color: var(--text-dim);
+        width: 55px;
+        flex-shrink: 0;
+      }
+      .sys-input {
+        flex: 1;
+        padding: 5px 8px;
+        font-size: 12px;
+        font-family: "SF Mono", Menlo, monospace;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        outline: none;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      .sys-input:focus {
+        border-color: var(--accent);
+      }
+      .sys-input::placeholder {
+        color: var(--text-dim);
+        opacity: 0.5;
+      }
+      .hk-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 14px;
+      }
+      .hk-label {
+        font-size: 11px;
+        color: var(--text-dim);
+        width: 55px;
+        flex-shrink: 0;
+      }
+      .hk-display {
+        flex: 1;
+        font-size: 12px;
+        font-family: "SF Mono", Menlo, monospace;
+        color: var(--text);
+        padding: 5px 8px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        min-height: 26px;
+        line-height: 16px;
+      }
+      .hk-display.listening {
+        border-color: var(--accent);
+        color: var(--accent);
+        animation: pulse 1.2s infinite;
+      }
+      .hk-set-btn {
+        padding: 4px 10px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-section);
+        color: var(--text);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .hk-set-btn:hover {
+        background: var(--bg-hover);
+      }
+      .hk-reload-prompt {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 14px 8px;
+        font-size: 11px;
+        color: var(--accent);
+      }
+      .hk-set-btn.listening {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .sys-btn {
+        padding: 4px 10px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-section);
+        color: var(--text);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .sys-btn:hover {
+        background: var(--bg-hover);
+      }
+      .sys-btn-danger {
+        border-color: var(--red);
+        color: var(--red);
+      }
+      .sys-btn-danger:hover {
+        background: rgba(233, 69, 96, 0.15);
+      }
+      .sys-hint {
+        font-size: 10px;
+        color: var(--text-dim);
+        padding: 2px 14px 6px;
+        opacity: 0.7;
+      }
+      .sys-status {
+        font-size: 11px;
+        padding: 2px 14px 6px;
+      }
+      .sys-status.success {
+        color: var(--green);
+      }
+      .sys-status.error {
+        color: var(--red);
+      }
+      .import-progress {
+        padding: 4px 14px 8px;
+        display: none;
+      }
+      .import-progress.active {
+        display: block;
+      }
+      .import-progress-bar {
+        height: 6px;
+        background: var(--border);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .import-progress-fill {
+        height: 100%;
+        background: var(--accent);
+        border-radius: 3px;
+        transition: width 1s ease;
+        width: 0%;
+      }
+      .import-progress-text {
+        font-size: 10px;
+        color: var(--text-dim);
+        margin-top: 3px;
+        display: flex;
+        justify-content: space-between;
       }
 
       /* ── Sections ── */
@@ -396,7 +563,7 @@
       .auth-banner {
         padding: 12px 14px;
         text-align: center;
-        background: var(--bg-section);
+        background: transparent;
       }
       .auth-banner .btn {
         width: 100%;
@@ -436,7 +603,10 @@
         max-height: 0;
         padding: 0 14px;
         overflow: hidden;
-        transition: opacity 0.4s, max-height 0.4s, padding 0.4s;
+        transition:
+          opacity 0.4s,
+          max-height 0.4s,
+          padding 0.4s;
       }
 
       /* ── Collapsible ── */
@@ -714,8 +884,6 @@
         </div>
       </div>
 
-
-
       <!-- History -->
       <div class="section">
         <div class="section-header" data-toggle-section="history">
@@ -726,6 +894,119 @@
         </div>
         <div class="section-body" id="bodyHistory">
           <div class="history-empty">No history yet</div>
+        </div>
+      </div>
+
+      <!-- System Settings -->
+      <div class="system-bar">
+        <!-- Hotkeys -->
+        <div class="section">
+          <div class="section-header" data-toggle-section="hotkeys">
+            <span class="section-title" style="padding: 0">Hotkeys</span>
+            <span class="section-chevron" id="chevronHotkeys">▶</span>
+          </div>
+          <div class="section-body" id="bodyHotkeys">
+            <div class="hk-row">
+              <span class="hk-label">Toggle</span>
+              <span class="hk-display" id="hkDisplayToggle"></span>
+              <button class="hk-set-btn" data-hotkey="toggle">Set</button>
+            </div>
+            <div class="hk-row">
+              <span class="hk-label">Stop</span>
+              <span class="hk-display" id="hkDisplayStop"></span>
+              <button class="hk-set-btn" data-hotkey="stop">Set</button>
+            </div>
+            <div class="hk-row">
+              <span class="hk-label">Panel</span>
+              <span class="hk-display" id="hkDisplayPanel"></span>
+              <button class="hk-set-btn" data-hotkey="panel">Set</button>
+            </div>
+            <div class="sys-hint">Reload Hammerspoon to apply new hotkeys</div>
+            <div
+              class="hk-reload-prompt"
+              id="hkReloadPrompt"
+              style="display: none"
+            >
+              <span>Hotkeys changed.</span>
+              <button
+                class="sys-btn"
+                id="btnHkReload"
+                style="border-color: var(--accent); color: var(--accent)"
+              >
+                Reload Now
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Models -->
+        <div class="section">
+          <div class="section-header" data-toggle-section="customModels">
+            <span class="section-title" style="padding: 0"
+              >Import Custom Model</span
+            >
+            <span class="section-chevron" id="chevronCustomModels">▶</span>
+          </div>
+          <div class="section-body" id="bodyCustomModels">
+            <div class="sys-row">
+              <input
+                class="sys-input"
+                id="customModelUrl"
+                placeholder="https://huggingface.co/…/model.gguf"
+                style="flex: 1"
+              />
+            </div>
+            <div class="sys-row">
+              <input
+                class="sys-input"
+                id="customModelName"
+                placeholder="Display name (optional)"
+                style="flex: 1"
+              />
+              <button class="sys-btn" id="btnImportModel">Import</button>
+            </div>
+            <div class="sys-hint">Paste a HuggingFace GGUF download link</div>
+            <div class="sys-status" id="importStatus"></div>
+            <div class="import-progress" id="importProgress">
+              <div class="import-progress-bar">
+                <div class="import-progress-fill" id="importProgressFill"></div>
+              </div>
+              <div class="import-progress-text">
+                <span id="importProgressText"></span>
+                <span id="importProgressPct"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Clear Tokens -->
+        <div class="section">
+          <div class="section-header" data-toggle-section="clearTokens">
+            <span class="section-title" style="padding: 0">Clear Tokens</span>
+            <span class="section-chevron" id="chevronClearTokens">▶</span>
+          </div>
+          <div class="section-body" id="bodyClearTokens">
+            <div class="sys-row">
+              <button class="sys-btn sys-btn-danger" id="btnClearCopilot">
+                Clear GitHub Copilot Token
+              </button>
+              <button class="sys-btn sys-btn-danger" id="btnClearClaude">
+                Clear Claude API Key
+              </button>
+            </div>
+            <div class="sys-status" id="clearStatus"></div>
+          </div>
+        </div>
+
+        <!-- Reload Hammerspoon -->
+        <div style="padding: 8px 14px">
+          <button
+            class="sys-btn"
+            id="btnReloadHammerspoon"
+            style="width: 100%; text-align: center; padding: 6px 0"
+          >
+            Reload Hammerspoon
+          </button>
         </div>
       </div>
     </div>
@@ -942,6 +1223,47 @@
         }
       }
 
+      // Lightweight: update only download progress badges without full re-render
+      function updateDownloadProgress(downloading) {
+        var container = document.getElementById("bodyModels");
+        if (!container) return;
+        var badges = container.querySelectorAll(".radio-badge.downloading");
+        for (var i = 0; i < badges.length; i++) {
+          var row = badges[i].closest(".radio-row");
+          if (!row) continue;
+          // Find which model this row is for (disabled rows during download have no data-download)
+          var label = row.querySelector(".radio-label");
+          if (!label) continue;
+          for (var m in downloading) {
+            var display = m.replace(/^ggml-/, "").replace(/\.bin$/, "");
+            if (label.textContent.indexOf(display) !== -1) {
+              badges[i].textContent = downloading[m];
+              break;
+            }
+          }
+        }
+      }
+
+      function updateLocalDownloadProgress(downloading) {
+        localModelsState.downloading = downloading;
+        if (currentBackend !== "local") return;
+        var container = document.getElementById("bodyBackend");
+        if (!container) return;
+        var badges = container.querySelectorAll(".radio-badge.downloading");
+        for (var i = 0; i < badges.length; i++) {
+          var row = badges[i].closest(".radio-row");
+          if (!row) continue;
+          var label = row.querySelector(".radio-label");
+          if (!label) continue;
+          for (var mid in downloading) {
+            if (label.textContent.indexOf(mid) !== -1) {
+              badges[i].textContent = downloading[mid];
+              break;
+            }
+          }
+        }
+      }
+
       function formatDuration(seconds) {
         var m = Math.floor(seconds / 60);
         var s = seconds % 60;
@@ -981,6 +1303,7 @@
         }
         // Update collapsed summary
         var vocabSummary = document.getElementById("vocabSummary");
+        var vocabCharCount = document.getElementById("vocabCharCount");
         if (vocabSummary) {
           var val = (settings.WHISPER_CUSTOM_VOCAB || "").trim();
           if (val) {
@@ -991,6 +1314,33 @@
               count + (count === 1 ? " term" : " terms");
           } else {
             vocabSummary.textContent = "";
+          }
+        }
+        if (vocabCharCount) {
+          var len = (settings.WHISPER_CUSTOM_VOCAB || "").length;
+          if (len > 0) {
+            vocabCharCount.textContent = len + " / 500";
+            vocabCharCount.style.color =
+              len > 400 ? "#ff9500" : "var(--text-dim)";
+            if (len >= 500) vocabCharCount.style.color = "#e94560";
+          } else {
+            vocabCharCount.textContent = "";
+          }
+        }
+
+        // Hotkeys
+        var hkConfMap = {
+          WHISPER_HOTKEY_TOGGLE: "hkDisplayToggle",
+          WHISPER_HOTKEY_STOP: "hkDisplayStop",
+          WHISPER_HOTKEY_PANEL: "hkDisplayPanel",
+        };
+        for (var confKey in hkConfMap) {
+          if (settings[confKey] !== undefined) {
+            var hkEl = document.getElementById(hkConfMap[confKey]);
+            if (hkEl && !hkEl.classList.contains("listening")) {
+              hkEl.textContent = formatHotkeyDisplay(settings[confKey]);
+              hkEl.dataset.rawValue = settings[confKey];
+            }
           }
         }
       }
@@ -1050,9 +1400,10 @@
 
         // Copilot auth (only visible when copilot is selected and no token)
         if (activeBackend === "copilot") {
-          html += '<div id="copilotAuthInline" class="auth-banner" style="display:none"><div id="authContent">' +
+          html +=
+            '<div id="copilotAuthInline" class="auth-banner" style="display:none"><div id="authContent">' +
             '<button class="btn btn-primary" data-action="auth">Sign in to GitHub Copilot</button>' +
-            '</div></div>';
+            "</div></div>";
         }
 
         // Claude API key input (only visible when claude is selected)
@@ -1319,7 +1670,8 @@
         var wrapper = document.getElementById("copilotAuthInline");
         var content = document.getElementById("authContent");
         if (!wrapper || !content) return;
-        content.innerHTML = '<div class="auth-success">✓ Authentication successful</div>';
+        content.innerHTML =
+          '<div class="auth-success">✓ Authentication successful</div>';
         setTimeout(function () {
           wrapper.classList.add("fade-out");
         }, 2500);
@@ -1363,16 +1715,260 @@
           .replace(/"/g, "&quot;");
       }
 
-      function escapeAttr(s) {
-        // For onclick attributes: JSON-encode the string
-        return (
-          "'" +
-          String(s)
-            .replace(/\\/g, "\\\\")
-            .replace(/'/g, "\\'")
-            .replace(/\n/g, "\\n") +
-          "'"
-        );
+      // ── System Settings ──────────────────────────────────────────────────────────
+
+      var HOTKEY_MAP = {
+        toggle: { display: "hkDisplayToggle", conf: "WHISPER_HOTKEY_TOGGLE" },
+        stop: { display: "hkDisplayStop", conf: "WHISPER_HOTKEY_STOP" },
+        panel: { display: "hkDisplayPanel", conf: "WHISPER_HOTKEY_PANEL" },
+      };
+      var activeHotkeyCapture = null;
+
+      function formatHotkeyDisplay(raw) {
+        if (!raw) return "";
+        var parts = raw.split(",");
+        var symbols = {
+          shift: "⇧",
+          cmd: "⌘",
+          alt: "⌥",
+          ctrl: "⌃",
+          option: "⌥",
+          control: "⌃",
+          command: "⌘",
+        };
+        return parts
+          .map(function (p) {
+            var t = p.trim().toLowerCase();
+            return symbols[t] || t.toUpperCase();
+          })
+          .join("");
+      }
+
+      function startHotkeyCapture(which) {
+        // Cancel any existing capture
+        if (activeHotkeyCapture) {
+          stopHotkeyCapture(activeHotkeyCapture, false);
+        }
+        activeHotkeyCapture = which;
+        // Disable Hammerspoon hotkeys so they don't fire during capture
+        sendToLua("action", { command: "hotkeyCapture", active: true });
+        var info = HOTKEY_MAP[which];
+        var display = document.getElementById(info.display);
+        var btn = document.querySelector('[data-hotkey="' + which + '"]');
+        if (display) {
+          display.textContent = "Press keys…";
+          display.classList.add("listening");
+        }
+        if (btn) {
+          btn.textContent = "Cancel";
+          btn.classList.add("listening");
+        }
+      }
+
+      function stopHotkeyCapture(which, save) {
+        var info = HOTKEY_MAP[which];
+        var display = document.getElementById(info.display);
+        var btn = document.querySelector('[data-hotkey="' + which + '"]');
+        if (display) {
+          display.classList.remove("listening");
+          if (!save && display.dataset.rawValue) {
+            display.textContent = formatHotkeyDisplay(display.dataset.rawValue);
+          }
+        }
+        if (btn) {
+          btn.textContent = "Set";
+          btn.classList.remove("listening");
+        }
+        if (activeHotkeyCapture === which) {
+          activeHotkeyCapture = null;
+          // Re-enable Hammerspoon hotkeys
+          sendToLua("action", { command: "hotkeyCapture", active: false });
+        }
+      }
+
+      document.addEventListener(
+        "keydown",
+        function (e) {
+          if (!activeHotkeyCapture) return;
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Ignore lone modifier presses
+          if (["Shift", "Control", "Alt", "Meta"].indexOf(e.key) !== -1) return;
+
+          var mods = [];
+          if (e.shiftKey) mods.push("shift");
+          if (e.ctrlKey) mods.push("ctrl");
+          if (e.altKey) mods.push("alt");
+          if (e.metaKey) mods.push("cmd");
+
+          // Need at least one modifier
+          if (mods.length === 0) {
+            if (e.key === "Escape") {
+              stopHotkeyCapture(activeHotkeyCapture, false);
+            }
+            return;
+          }
+
+          var key = e.key.toLowerCase();
+          // Normalize special keys
+          if (key === " ") key = "space";
+          else if (key === "arrowup") key = "up";
+          else if (key === "arrowdown") key = "down";
+          else if (key === "arrowleft") key = "left";
+          else if (key === "arrowright") key = "right";
+
+          var combo = mods.concat([key]).join(",");
+          var which = activeHotkeyCapture;
+          var info = HOTKEY_MAP[which];
+          var display = document.getElementById(info.display);
+          if (display) {
+            display.textContent = formatHotkeyDisplay(combo);
+            display.dataset.rawValue = combo;
+          }
+          stopHotkeyCapture(which, true);
+          sendToLua("setSetting", { key: info.conf, value: combo });
+          // Show reload prompt
+          var prompt = document.getElementById("hkReloadPrompt");
+          if (prompt) prompt.style.display = "";
+        },
+        true,
+      );
+
+      function importCustomModel() {
+        var urlInput = document.getElementById("customModelUrl");
+        var nameInput = document.getElementById("customModelName");
+        var status = document.getElementById("importStatus");
+        if (!urlInput) return;
+        var url = urlInput.value.trim();
+        if (!url) return;
+        if (!url.match(/^https:\/\/huggingface\.co\/.+\.gguf$/)) {
+          status.textContent = "Invalid URL — must be a HuggingFace .gguf link";
+          status.className = "sys-status error";
+          return;
+        }
+        status.textContent = "Importing…";
+        status.className = "sys-status";
+        var prog = document.getElementById("importProgress");
+        if (prog) {
+          prog.className = "import-progress active";
+        }
+        var fill = document.getElementById("importProgressFill");
+        if (fill) {
+          fill.style.width = "0%";
+        }
+        var ptxt = document.getElementById("importProgressText");
+        if (ptxt) {
+          ptxt.textContent = "Starting download…";
+        }
+        var ppct = document.getElementById("importProgressPct");
+        if (ppct) {
+          ppct.textContent = "";
+        }
+        sendToLua("importCustomModel", {
+          url: url,
+          name: (nameInput && nameInput.value.trim()) || "",
+        });
+      }
+
+      function clearCopilotToken() {
+        sendToLua("clearCopilotToken");
+      }
+
+      function clearClaudeKey() {
+        sendToLua("clearClaudeKey");
+      }
+
+      function reloadHammerspoon() {
+        sendToLua("action", { command: "reloadHammerspoon" });
+      }
+
+      function updateSystemSettings(data) {
+        if (data.copilotCleared) {
+          var s = document.getElementById("clearStatus");
+          if (s) {
+            s.textContent = "✓ Copilot token cleared";
+            s.className = "sys-status success";
+            setTimeout(function () {
+              s.textContent = "";
+            }, 3000);
+          }
+        }
+        if (data.claudeCleared) {
+          var s = document.getElementById("clearStatus");
+          if (s) {
+            s.textContent = "✓ Claude API key cleared";
+            s.className = "sys-status success";
+            setTimeout(function () {
+              s.textContent = "";
+            }, 3000);
+          }
+        }
+        if (data.importError) {
+          var prog = document.getElementById("importProgress");
+          if (prog) prog.className = "import-progress";
+          var s = document.getElementById("importStatus");
+          if (s) {
+            s.textContent = "✗ " + escapeHtml(data.importError);
+            s.className = "sys-status error";
+          }
+        }
+        if (data.importDone) {
+          var prog = document.getElementById("importProgress");
+          if (prog) prog.className = "import-progress";
+          var s = document.getElementById("importStatus");
+          if (s) {
+            var msg = "✓ Model imported";
+            if (data.importWarnings && data.importWarnings.length > 0) {
+              msg += "\n⚠ " + data.importWarnings.join("\n⚠ ");
+              s.innerHTML = escapeHtml(msg).replace(/\n/g, "<br>");
+              s.className = "sys-status success";
+              setTimeout(function () {
+                s.textContent = "";
+              }, 8000);
+            } else {
+              s.textContent = msg;
+              s.className = "sys-status success";
+              setTimeout(function () {
+                s.textContent = "";
+              }, 3000);
+            }
+          }
+          var urlInput = document.getElementById("customModelUrl");
+          var nameInput = document.getElementById("customModelName");
+          if (urlInput) urlInput.value = "";
+          if (nameInput) nameInput.value = "";
+        }
+        if (
+          data.importWarnings &&
+          data.importWarnings.length > 0 &&
+          !data.importDone &&
+          !data.importError
+        ) {
+          var s = document.getElementById("importStatus");
+          if (s) {
+            s.innerHTML =
+              "⚠ " + data.importWarnings.map(escapeHtml).join("<br>⚠ ");
+            s.className = "sys-status error";
+          }
+        }
+        if (data.importProgress) {
+          var fill = document.getElementById("importProgressFill");
+          var ptxt = document.getElementById("importProgressText");
+          var ppct = document.getElementById("importProgressPct");
+          var status = document.getElementById("importStatus");
+          if (fill) fill.style.width = (data.importPct || 0) + "%";
+          if (ptxt)
+            ptxt.textContent =
+              data.importProgress +
+              (data.importTotal ? " / " + data.importTotal : "");
+          if (ppct)
+            ppct.textContent = data.importPct ? data.importPct + "%" : "";
+          if (status) {
+            status.textContent = "Downloading…";
+            status.className = "sys-status";
+          }
+        }
       }
 
       // ── Init ─────────────────────────────────────────────────────────────────────
@@ -1440,6 +2036,32 @@
           // History copy
           if (el.dataset && el.dataset.copyText) {
             copyHistory(el.dataset.copyText);
+            return;
+          }
+          // System settings buttons
+          if (el.dataset && el.dataset.hotkey) {
+            var which = el.dataset.hotkey;
+            if (activeHotkeyCapture === which) {
+              stopHotkeyCapture(which, false);
+            } else {
+              startHotkeyCapture(which);
+            }
+            return;
+          }
+          if (el.id === "btnImportModel") {
+            importCustomModel();
+            return;
+          }
+          if (el.id === "btnClearCopilot") {
+            clearCopilotToken();
+            return;
+          }
+          if (el.id === "btnClearClaude") {
+            clearClaudeKey();
+            return;
+          }
+          if (el.id === "btnHkReload" || el.id === "btnReloadHammerspoon") {
+            reloadHammerspoon();
             return;
           }
           el = el.parentElement;

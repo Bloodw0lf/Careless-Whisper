@@ -88,6 +88,15 @@ for tmpdir in "${TMPDIR:-}" /tmp; do
           "${tmpdir}/llama-server.log"
 done
 
+# ── Remove macOS Quick Action ────────────────────────────────────────────────
+
+WORKFLOW_PATH="${HOME}/Library/Services/Careless Whisper — Process Text.workflow"
+if [ -d "${WORKFLOW_PATH}" ]; then
+    rm -rf "${WORKFLOW_PATH}"
+    /System/Library/CoreServices/pbs -flush 2>/dev/null || true
+    echo "==> Removed Quick Action: Careless Whisper — Process Text"
+fi
+
 # ── Optionally remove Homebrew packages ──────────────────────────────────────
 
 if command -v brew >/dev/null 2>&1; then

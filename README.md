@@ -7,7 +7,7 @@ Uses [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for transcription a
 ## Quick Start
 
 ```bash
-git clone https://wwwin-github.cisco.com/bpleger/Careless-Whisper.git
+git clone https://github.com/Bloodw0lf/Careless-Whisper.git
 cd Careless-Whisper
 ./install.sh
 ```
@@ -53,6 +53,13 @@ Click the menubar icon to open the **settings panel** — a floating window with
 - **Recent Transcriptions** — click to copy to clipboard
 
 The panel can also be toggled via `⇧⌘W`. Closing the panel window does not stop Whisper.
+
+### System Settings (bottom of panel)
+
+- **Hotkeys** — press Set, then press your desired key combination (like rebinding keys in a game). Hammerspoon hotkeys are disabled during capture so they don't fire.
+- **Import Custom Model** — paste a HuggingFace GGUF download link. Validates the GGUF header, checks RAM requirements, and shows a progress bar during download.
+- **Clear Tokens** — remove stored Copilot token or Claude API key.
+- **Reload Hammerspoon** — apply config changes without leaving the panel.
 
 ## AI Post-Processing
 
@@ -131,9 +138,13 @@ Models can be downloaded automatically via:
 
 - **Install script**: `./install.sh` offers interactive local model selection (default: 7B)
 - **Panel**: AI Backend → Local → Download section
+- **Panel**: System Settings → Import Custom Model (any HuggingFace GGUF link)
 - **CLI**: `./whisper.sh download-local-model Qwen2.5-7B`
+- **CLI**: `./whisper.sh import-custom-model <huggingface-url> [display-name]`
 
 Or download GGUFs manually from [bartowski](https://huggingface.co/bartowski) on Hugging Face (use Q4_K_M quantization).
+
+Custom model imports auto-convert `/blob/` browser URLs to `/resolve/` download URLs, validate the GGUF magic header after download, and warn about RAM or quantization issues.
 
 > **Bonsai-8B** uses Q1_0 quantization which requires the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp).
 > The installer and panel download will build it automatically to `~/.local/share/careless-whisper/prismml-llama-server`.
@@ -179,36 +190,36 @@ English-only variants (`.en.bin`) are also available from [Hugging Face](https:/
 
 All settings live in `whisper-stt.conf` (created by the installer, gitignored):
 
-| Variable                    | Default                                   | Description                                |
-| --------------------------- | ----------------------------------------- | ------------------------------------------ |
-| `WHISPER_MODEL_PATH`        | `models/ggml-large-v3-turbo.bin`          | Active model (or use menubar)              |
-| `WHISPER_LANGUAGE`          | `auto`                                    | Language code or `auto`                    |
-| `WHISPER_TRANSLATE`         | `0`                                       | `1` = translate everything to English      |
-| `WHISPER_AUTO_PASTE`        | `1`                                       | Auto-paste after transcription             |
-| `WHISPER_AUTO_ENTER`        | `0`                                       | Press Enter after paste (for LLM chats)    |
-| `WHISPER_RESTORE_CLIPBOARD` | `0`                                       | Restore clipboard after auto-paste         |
-| `WHISPER_AUDIO_DEVICE`      | `default`                                 | macOS input device (or AVFoundation index) |
-| `WHISPER_MAX_SECONDS`       | `7200`                                    | Max recording length                       |
-| `WHISPER_HISTORY_MAX`       | `10`                                      | Entries kept in history                    |
-| `WHISPER_NOTIFICATIONS`     | `1`                                       | `0` = disable notifications                |
-| `WHISPER_SOUNDS`            | `1`                                       | `0` = disable sounds                       |
-| `WHISPER_TRIM_SILENCE`      | `1`                                       | Trim leading/trailing silence from audio   |
-| `WHISPER_HOTKEY_TOGGLE`     | `shift,cmd,r`                             | Toggle hotkey                              |
-| `WHISPER_HOTKEY_STOP`       | `shift,cmd,q`                             | Emergency stop hotkey                      |
-| `WHISPER_HOTKEY_PANEL`      | `shift,cmd,w`                             | Panel hotkey                               |
-| `WHISPER_POST_PROCESS`      | `off`                                     | Post-processing mode (or use panel)        |
-| `WHISPER_PP_BACKEND`        | `copilot`                                 | AI backend: `none`, `copilot`, `claude`, `local`   |
-| `WHISPER_COPILOT_MODEL`     | `claude-sonnet-4.6`                       | Copilot model for post-processing          |
-| `WHISPER_CLAUDE_API_KEY`    | —                                         | Anthropic API key (for `claude` backend)   |
-| `WHISPER_CLAUDE_MODEL`      | `claude-haiku-4-5-20251001`               | Claude model name                          |
-| `WHISPER_LOCAL_MODEL`       | —                                         | Path to GGUF file (for `local` backend)    |
-| `WHISPER_LOCAL_URL`         | `http://127.0.0.1:8085`                   | llama-server API URL                       |
-| `WHISPER_LOCAL_GPU_LAYERS`  | `99`                                      | GPU layers to offload (Metal)              |
-| `WHISPER_LOCAL_CTX`         | `8192`                                    | Context window size                        |
-| `WHISPER_PRISMML_LLAMA_BIN` | `~/.local/share/.../prismml-llama-server` | PrismML fork binary for Bonsai Q1_0        |
-| `WHISPER_CUSTOM_VOCAB`      | —                                         | Spelling hints for domain terms            |
-| `WHISPER_HISTORY_FILE`      | `history.txt`                             | Path to transcription log                  |
-| `WHISPER_DEV_TIMINGS`       | `0`                                       | `1` = append timing breakdown to output    |
+| Variable                    | Default                                   | Description                                      |
+| --------------------------- | ----------------------------------------- | ------------------------------------------------ |
+| `WHISPER_MODEL_PATH`        | `models/ggml-large-v3-turbo.bin`          | Active model (or use menubar)                    |
+| `WHISPER_LANGUAGE`          | `auto`                                    | Language code or `auto`                          |
+| `WHISPER_TRANSLATE`         | `0`                                       | `1` = translate everything to English            |
+| `WHISPER_AUTO_PASTE`        | `1`                                       | Auto-paste after transcription                   |
+| `WHISPER_AUTO_ENTER`        | `0`                                       | Press Enter after paste (for LLM chats)          |
+| `WHISPER_RESTORE_CLIPBOARD` | `0`                                       | Restore clipboard after auto-paste               |
+| `WHISPER_AUDIO_DEVICE`      | `default`                                 | macOS input device (or AVFoundation index)       |
+| `WHISPER_MAX_SECONDS`       | `7200`                                    | Max recording length                             |
+| `WHISPER_HISTORY_MAX`       | `10`                                      | Entries kept in history                          |
+| `WHISPER_NOTIFICATIONS`     | `1`                                       | `0` = disable notifications                      |
+| `WHISPER_SOUNDS`            | `1`                                       | `0` = disable sounds                             |
+| `WHISPER_TRIM_SILENCE`      | `1`                                       | Trim leading/trailing silence from audio         |
+| `WHISPER_HOTKEY_TOGGLE`     | `shift,cmd,r`                             | Toggle hotkey                                    |
+| `WHISPER_HOTKEY_STOP`       | `shift,cmd,q`                             | Emergency stop hotkey                            |
+| `WHISPER_HOTKEY_PANEL`      | `shift,cmd,w`                             | Panel hotkey                                     |
+| `WHISPER_POST_PROCESS`      | `off`                                     | Post-processing mode (or use panel)              |
+| `WHISPER_PP_BACKEND`        | `copilot`                                 | AI backend: `none`, `copilot`, `claude`, `local` |
+| `WHISPER_COPILOT_MODEL`     | `claude-sonnet-4.6`                       | Copilot model for post-processing                |
+| `WHISPER_CLAUDE_API_KEY`    | —                                         | Anthropic API key (for `claude` backend)         |
+| `WHISPER_CLAUDE_MODEL`      | `claude-haiku-4-5-20251001`               | Claude model name                                |
+| `WHISPER_LOCAL_MODEL`       | —                                         | Path to GGUF file (for `local` backend)          |
+| `WHISPER_LOCAL_URL`         | `http://127.0.0.1:8085`                   | llama-server API URL                             |
+| `WHISPER_LOCAL_GPU_LAYERS`  | `99`                                      | GPU layers to offload (Metal)                    |
+| `WHISPER_LOCAL_CTX`         | `8192`                                    | Context window size                              |
+| `WHISPER_PRISMML_LLAMA_BIN` | `~/.local/share/.../prismml-llama-server` | PrismML fork binary for Bonsai Q1_0              |
+| `WHISPER_CUSTOM_VOCAB`      | —                                         | Spelling hints for domain terms                  |
+| `WHISPER_HISTORY_FILE`      | `history.txt`                             | Path to transcription log                        |
+| `WHISPER_DEV_TIMINGS`       | `0`                                       | `1` = append timing breakdown to output          |
 
 ## Uninstall
 
@@ -299,5 +310,9 @@ Generated locally (gitignored):
 ./whisper.sh auth                          # GitHub Copilot OAuth sign-in
 ./whisper.sh check-update                  # check for available updates
 ./whisper.sh self-update                   # update in place
+./whisper.sh import-custom-model <url> [name]  # import HuggingFace GGUF
+./whisper.sh clear-copilot-token           # remove stored Copilot token
+./whisper.sh clear-claude-key              # remove stored Claude API key
+echo "text" | ./whisper.sh process-text [mode]  # run post-processing on stdin
 bash -n whisper.sh                         # syntax check
 ```
